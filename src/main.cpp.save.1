@@ -1,0 +1,36 @@
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include <sstream>
+#include <iostream>
+#include <wiringPi.h>
+
+using namespace std;
+
+void gotMsgInt(const std_msgs::String::ConstPtr&msg)
+{
+	cout << msg->data.c_str();
+	digitalWrite(5,!digitalRead(5));
+}
+
+int main(int argc, char **argv)
+{
+	wiringPiSetup();
+	pinMode(5,OUTPUT);
+	ros::init(argc, argv, "quadControl");
+	ros::NodeHandle n;
+	ros::Publisher quadStatus = n.advertise<std_msgs::String>("quadStatus", 10);
+	ros::Subscriber quadPosition = n.subscribe("quadPosition", 10, gotMsgInt);
+	ros::Rate loop_rate(10);
+
+	while(ros::ok())
+	{
+		std_msgs::String msg;
+		std::stringstream ss;
+		ss << "Quad OK";
+		msg.data = ss.str();
+		quadStatus.publish(msg);
+		ros::spinOnce();
+		loop_rate.sleep();
+	}
+	return 0;
+}
