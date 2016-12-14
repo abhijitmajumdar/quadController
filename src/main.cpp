@@ -13,7 +13,7 @@
 
 #define TIME_TO_COMPUTE 20000 //uS
 #define TIME_TO_UPDATEMOTOR 20000 //uS
-#define TIME_TO_ROS_PUBLISH 500000 //uS
+#define TIME_TO_ROS_PUBLISH 200000 //uS
 #define TIME_TO_ROS_SPIN 200000 //uS
 #define TIME_TO_ARM 3000000 //uS
 #define TIME_TO_DEBUG_DISPLAY 1000000 //uS
@@ -58,35 +58,39 @@ void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 			throttle=(((float)qSpeed)/100)+(1.0);
 		else
 			throttle = 1.0;
+		
 		int32_t qP = msg->qP;
 		if((qP>=0) & (qP<10000))
 		{
 			vPhi.Kp=((float)qP)/1000;
-			vTheta.Kp=((float)qP)/1000;
 		}
+		
 		int32_t qI = msg->qI;
 		if((qI>=0) & (qI<1000))
 		{
 			vPhi.Ki=((float)qI)/1000000;
-			vTheta.Ki=((float)qI)/1000000;
 		}
 		if(qI==0)
 		{
 			vPhi.integratedSum = 0;
-			vTheta.integratedSum = 0;
 		}
+		
 		int32_t qD = msg->qD;
 		if((qD>=0) & (qD<100))
 		{
 			vPhi.Kd=((float)qD)*1000;
-			vTheta.Kd=((float)qD)*1000;
 		}
 		if(qD==0)
 		{
 			vPhi.previousError = 0;
-			vTheta.previousError = 0;
 		}
-		cout<<"T,P,I,D = "<<throttle<<','<<vPhi.Kp<<','<<vPhi.Ki<<','<<vPhi.Kd<<"\n";
+		
+		int32_t qPA = msg->qPA;
+		if((qPA>=0) & (qPA<=100))
+		{
+			vPhi.KpAngular=((float)qPA)/100;
+		}
+		cout<<"T,P,I,D,PA = "<<throttle<<','<<vPhi.Kp<<','<<vPhi.Ki<<','<<vPhi.Kd<<','<<vPhi.KpAngular<<"\n";
 	}
 	else{
 		cout<<"Message not for me: "<<msg->qID;
@@ -103,6 +107,7 @@ void initPIDvalues(void)
 	vPhi.previousTime = 0;
 	vPhi.targetValue = 0;
 	vPhi.boundIterm = 0.35;
+	vPhi.KpAngular = 0;
 	
 	vTheta.Kp = 0;
 	vTheta.Ki = 0;
@@ -112,8 +117,9 @@ void initPIDvalues(void)
 	vTheta.previousTime = 0;
 	vTheta.targetValue = 0;
 	vTheta.boundIterm = 0.35;
+	vTheta.KpAngular = 0;
 	
-	vGamma.Kp = 0.1;
+	vGamma.Kp = 0;
 	vGamma.Ki = 0;
 	vGamma.Kd = 0;
 	vGamma.integratedSum = 0;
@@ -121,6 +127,7 @@ void initPIDvalues(void)
 	vGamma.previousTime = 0;
 	vGamma.targetValue = 0;
 	vGamma.boundIterm = 0.35;
+	vGamma.KpAngular = 0;
 	
 	vMotor.m1Value = 0;
 	vMotor.m2Value = 0;
@@ -164,8 +171,7 @@ int main(int argc, char **argv)
 		{
 			timeToCompute = timeNow;
 			imud = IMU_data();
-			imud.fusionPose.setZ(0);
-			imud.fusionPose.setY(0);
+			//filterGyroData(&imud);
 			//groundDistance = SONAR_data();
 			quadController.compute();
 		}
@@ -211,9 +217,12 @@ int main(int argc, char **argv)
 			msg.qM2 = vMotor.m2Value;
 			msg.qM3 = vMotor.m3Value;
 			msg.qM4 = vMotor.m4Value;
-			msg.qX = imud.fusionPose.x();
-			msg.qY = imud.fusionPose.y();
-			msg.qZ = imud.fusionPose.z();
+			msg.qXa = imud.fusionPose.x();
+			msg.qYa = imud.fusionPose.y();
+			msg.qZa = imud.fusionPose.z();
+			msg.qXg = imud.gyro.x();
+			msg.qYg = imud.gyro.y();
+			msg.qZg = imud.gyro.z();
 			quadStatus.publish(msg);
 		}
 		

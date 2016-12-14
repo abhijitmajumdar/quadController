@@ -25,6 +25,7 @@ struct qPIDvariables {
 	float targetValue;
 	float computedPIDvalue;
 	float boundIterm;
+	float KpAngular;
 };
 
 struct qMotorThrust {
@@ -48,7 +49,7 @@ class qControl{
 		qControl(qPIDvariables*, qPIDvariables*, qPIDvariables*, qMotorThrust*, RTIMU_DATA*, int*, float*);
 		void compute();
 	private:
-		void qPIDcompute(float currentValue, uint64_t currentTime, qPIDvariables* qPIDv);
+		void qPIDcompute(float currentAngleValue, float currentGyroValue, uint64_t currentTime, qPIDvariables* qPIDv);
 		float qConstrain(float value, float min, float max);
 		void qCalibrateMotor();
 };

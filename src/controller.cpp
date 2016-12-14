@@ -1,6 +1,5 @@
 #include "controller.h"
 
-#define zDotTerm (float)1.4
 #define M1_OFFSET 0	//(float)0.09
 #define M2_OFFSET 0	//(float)0.20
 #define M3_OFFSET 0	//(float)0.20
@@ -19,15 +18,16 @@ qControl::qControl(qPIDvariables* vPhi, qPIDvariables* vTheta, qPIDvariables* vG
 
 void qControl::compute()
 {
-	qPIDcompute(currentVal->fusionPose.x(),currentVal->timestamp,qPIDval[0]);
-	qPIDcompute(currentVal->fusionPose.y(),currentVal->timestamp,qPIDval[1]);
-	qPIDcompute(currentVal->fusionPose.z(),currentVal->timestamp,qPIDval[2]);
+	qPIDcompute(currentVal->fusionPose.x(),currentVal->gyro.x(),currentVal->timestamp,qPIDval[0]);
+	qPIDcompute(currentVal->fusionPose.y(),currentVal->gyro.y(),currentVal->timestamp,qPIDval[1]);
+	qPIDcompute(currentVal->fusionPose.z(),currentVal->gyro.z(),currentVal->timestamp,qPIDval[2]);
 	qCalibrateMotor();
 }
 
-void qControl::qPIDcompute(float currentValue, uint64_t currentTime, qPIDvariables* qPIDv)
+void qControl::qPIDcompute(float currentAngleValue, float currentGyroValue, uint64_t currentTime, qPIDvariables* qPIDv)
 {
-	float error = qPIDv->targetValue - currentValue;
+	float error = qPIDv->KpAngular*(qPIDv->targetValue - currentAngleValue);
+	error = (error - currentGyroValue);
 	uint64_t dTime = currentTime - qPIDv->previousTime;
 	float pTerm = (qPIDv->Kp * error);
 	qPIDv->integratedSum += (qPIDv->Ki * error * dTime);
@@ -59,14 +59,10 @@ void qControl::qCalibrateMotor()
 	qM->m3Value = (zDotTerm + qPIDval[0]->computedPIDvalue - qPIDval[2]->computedPIDvalue);
 	qM->m4Value = (zDotTerm + qPIDval[1]->computedPIDvalue + qPIDval[2]->computedPIDvalue);
 #else
-//	qM->m1Value = (zDotTerm - qPIDval[0]->computedPIDvalue + qPIDval[1]->computedPIDvalue + qPIDval[2]->computedPIDvalue);
-//	qM->m2Value = (zDotTerm + qPIDval[0]->computedPIDvalue + qPIDval[1]->computedPIDvalue - qPIDval[2]->computedPIDvalue);
-//	qM->m3Value = (zDotTerm + qPIDval[0]->computedPIDvalue - qPIDval[1]->computedPIDvalue + qPIDval[2]->computedPIDvalue);
-//	qM->m4Value = (zDotTerm - qPIDval[0]->computedPIDvalue - qPIDval[1]->computedPIDvalue - qPIDval[2]->computedPIDvalue);
-	qM->m1Value = (qPIDval[0]->computedPIDvalue + qPIDval[1]->computedPIDvalue + qPIDval[2]->computedPIDvalue);
-	qM->m2Value = (qPIDval[0]->computedPIDvalue - qPIDval[1]->computedPIDvalue - qPIDval[2]->computedPIDvalue);
-	qM->m3Value = (- qPIDval[0]->computedPIDvalue - qPIDval[1]->computedPIDvalue + qPIDval[2]->computedPIDvalue);
-	qM->m4Value = (- qPIDval[0]->computedPIDvalue + qPIDval[1]->computedPIDvalue - qPIDval[2]->computedPIDvalue);
+	qM->m1Value = (qPIDval[0]->computedPIDvalue + qPIDval[1]->computedPIDvalue - qPIDval[2]->computedPIDvalue);
+	qM->m2Value = (qPIDval[0]->computedPIDvalue - qPIDval[1]->computedPIDvalue + qPIDval[2]->computedPIDvalue);
+	qM->m3Value = (- qPIDval[0]->computedPIDvalue - qPIDval[1]->computedPIDvalue - qPIDval[2]->computedPIDvalue);
+	qM->m4Value = (- qPIDval[0]->computedPIDvalue + qPIDval[1]->computedPIDvalue + qPIDval[2]->computedPIDvalue);
 #endif
 	qM->m1Value = qConstrain(qM->m1Value, qM->mMinPID, qM->mMaxPID);
 	qM->m2Value = qConstrain(qM->m2Value, qM->mMinPID, qM->mMaxPID);
