@@ -62,35 +62,35 @@ void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 		int32_t qP = msg->qP;
 		if((qP>=0) & (qP<10000))
 		{
-			vPhi.Kp=((float)qP)/1000;
+			vTheta.Kp=((float)qP)/1000;
 		}
 		
 		int32_t qI = msg->qI;
 		if((qI>=0) & (qI<1000))
 		{
-			vPhi.Ki=((float)qI)/1000000;
+			vTheta.Ki=((float)qI)/1000000;
 		}
 		if(qI==0)
 		{
-			vPhi.integratedSum = 0;
+			vTheta.integratedSum = 0;
 		}
 		
 		int32_t qD = msg->qD;
 		if((qD>=0) & (qD<100))
 		{
-			vPhi.Kd=((float)qD)*1000;
+			vTheta.Kd=((float)qD)*1000;
 		}
 		if(qD==0)
 		{
-			vPhi.previousError = 0;
+			vTheta.previousError = 0;
 		}
 		
 		int32_t qPA = msg->qPA;
 		if((qPA>=0) & (qPA<=100))
 		{
-			vPhi.KpAngular=((float)qPA)/100;
+			vTheta.KpAngular=((float)qPA)/100;
 		}
-		cout<<"T,P,I,D,PA = "<<throttle<<','<<vPhi.Kp<<','<<vPhi.Ki<<','<<vPhi.Kd<<','<<vPhi.KpAngular<<"\n";
+		cout<<"T,P,I,D,PA = "<<throttle<<','<<vTheta.Kp<<','<<vTheta.Ki<<','<<vTheta.Kd<<','<<vTheta.KpAngular<<"\n";
 	}
 	else{
 		cout<<"Message not for me: "<<msg->qID;
