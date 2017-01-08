@@ -11,6 +11,7 @@
 #include <quadMsgs/qParameters.h>
 #include <quadMsgs/qStatus.h>
 
+#define TIME_TO_UPDATE_TARGETANGLE 80000 //uS
 #define TIME_TO_COMPUTE 20000 //uS
 #define TIME_TO_UPDATEMOTOR 20000 //uS
 #define TIME_TO_ROS_PUBLISH 200000 //uS
@@ -19,6 +20,9 @@
 #define TIME_TO_DEBUG_DISPLAY 1000000 //uS
 
 #define QuadID 0x1289
+
+#define M (float)0.9
+#define N (float)(1-M)
 
 using namespace std;
 
@@ -29,6 +33,8 @@ static int groundDistance;
 static bool debugDisplay = false;
 static float throttle = 1.0;
 static bool Arm = false, Armed = false;
+static float targetAngleUpdater = 0.0;
+
 
 void gotquadPosition(const std_msgs::String::ConstPtr& msg)
 {
@@ -90,7 +96,13 @@ void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 		{
 			vTheta.KpAngular=((float)qPA)/100;
 		}
-		cout<<"T,P,I,D,PA = "<<throttle<<','<<vTheta.Kp<<','<<vTheta.Ki<<','<<vTheta.Kd<<','<<vTheta.KpAngular<<"\n";
+		
+		int32_t qTA = msg->qTargetAngle;
+		if((qTA>=-90) & (qTA<=90))
+		{
+			targetAngleUpdater=((float)qTA*3.14)/180;
+		}
+		cout<<"T,P,I,D,PA,TA = "<<throttle<<','<<vTheta.Kp<<','<<vTheta.Ki<<','<<vTheta.Kd<<','<<vTheta.KpAngular<<','<<vTheta.targetValue<<"\n";
 	}
 	else{
 		cout<<"Message not for me: "<<msg->qID;
@@ -142,6 +154,7 @@ void initPIDvalues(void)
 int main(int argc, char **argv)
 {
 	uint64_t timeToCompute = 0,timeToRosPublish = 0, timeToUpdateMotor = 0;
+	uint64_t timeToUpdateTargetAngle = 0;
 	uint64_t timeToRosSpin = 0, timeNow = 0;
 	uint64_t timeSinceArm = 0;
 	uint64_t timeToDebugDisplay=0;
@@ -167,6 +180,12 @@ int main(int argc, char **argv)
 	{
 		IMU_spin();
 		timeNow = RTMath::currentUSecsSinceEpoch();
+		if(timeNow-timeToUpdateTargetAngle>TIME_TO_UPDATE_TARGETANGLE)
+		{
+			timeToUpdateTargetAngle=timeNow;
+			vTheta.targetValue = (M*vTheta.targetValue)+(N*targetAngleUpdater);
+		}
+		
 		if(timeNow-timeToCompute>TIME_TO_COMPUTE)
 		{
 			timeToCompute = timeNow;
