@@ -10,31 +10,94 @@
 #include "controller.h"
 #include <quadMsgs/qParameters.h>
 #include <quadMsgs/qStatus.h>
-
-#define TIME_TO_UPDATE_TARGETANGLE 80000 //uS
-#define TIME_TO_COMPUTE 20000 //uS
-#define TIME_TO_UPDATEMOTOR 20000 //uS
-#define TIME_TO_ROS_PUBLISH 200000 //uS
-#define TIME_TO_ROS_SPIN 200000 //uS
-#define TIME_TO_ARM 3000000 //uS
-#define TIME_TO_DEBUG_DISPLAY 1000000 //uS
-
-#define QuadID 0x1289
-
-#define M (float)0.9
-#define N (float)(1-M)
+#include "configLoader.h"
 
 using namespace std;
+
+#define TIME_TO_UPDATE_TARGETANGLE 0
+#define TIME_TO_COMPUTE 1
+#define TIME_TO_UPDATEMOTOR 2
+#define TIME_TO_ROS_PUBLISH 3
+#define TIME_TO_ROS_SPIN 4
+#define TIME_TO_ARM 5
+#define TIME_TO_DEBUG_DISPLAY 6
+#define QuadID 0
+#define M 0
+#define N 1
+#define debugDisplay 0
+
+lConst timeConstants[7] = {
+	{"TIME_TO_UPDATE_TARGETANGLE",80000},
+	{"TIME_TO_COMPUTE",20000},
+	{"TIME_TO_UPDATEMOTOR",20000},
+	{"TIME_TO_ROS_PUBLISH",200000},
+	{"TIME_TO_ROS_SPIN",200000},
+	{"TIME_TO_ARM",3000000},
+	{"TIME_TO_DEBUG_DISPLAY",1000000}
+	};
+	
+lConst idConstants[1] = {
+	{"QuadID",4745}
+	};
+	
+fConst filterConstants[2] = {
+	{"M",0.9},
+	{"N",0.1}
+	};
+	
+bConst boolConstants[1] = {
+	{"debugDisplay",false}
+	};
 
 static qPIDvariables vPhi,vTheta,vGamma;
 static qMotorThrust vMotor;
 static RTIMU_DATA imud;
 static int groundDistance;
-static bool debugDisplay = false;
 static float throttle = 1.0;
 static bool Arm = false, Armed = false;
 static float targetAngleUpdater = 0.0;
 
+void initPIDvalues(void)
+{
+	vPhi.Kp = 0;
+	vPhi.Ki = 0;
+	vPhi.Kd = 0;
+	vPhi.integratedSum = 0;
+	vPhi.previousError = 0;
+	vPhi.previousTime = 0;
+	vPhi.targetValue = 0;
+	vPhi.boundIterm = 0.35;
+	vPhi.KpAngular = 0;
+	
+	vTheta.Kp = 0;
+	vTheta.Ki = 0;
+	vTheta.Kd = 0;
+	vTheta.integratedSum = 0;
+	vTheta.previousError = 0;
+	vTheta.previousTime = 0;
+	vTheta.targetValue = 0;
+	vTheta.boundIterm = 0.35;
+	vTheta.KpAngular = 0;
+	
+	vGamma.Kp = 0;
+	vGamma.Ki = 0;
+	vGamma.Kd = 0;
+	vGamma.integratedSum = 0;
+	vGamma.previousError = 0;
+	vGamma.previousTime = 0;
+	vGamma.targetValue = 0;
+	vGamma.boundIterm = 0.35;
+	vGamma.KpAngular = 0;
+	
+	vMotor.m1Value = 0;
+	vMotor.m2Value = 0;
+	vMotor.m3Value = 0;
+	vMotor.m4Value = 0;
+	vMotor.mMinBound = 1.0;
+	vMotor.mMaxBound = 2.2;
+	vMotor.mMinPID = -0.5;
+	vMotor.mMaxPID = 0.5;
+}
 
 void gotquadPosition(const std_msgs::String::ConstPtr& msg)
 {
@@ -57,7 +120,7 @@ void gotquadArm(const std_msgs::Bool::ConstPtr& msg)
 
 void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 {
-	if(msg->qID == QuadID)
+	if(msg->qID == idConstants[QuadID].value)
 	{
 		int32_t qSpeed = msg->qThrottle;
 		if((qSpeed>=0) & (qSpeed<=120))
@@ -109,48 +172,6 @@ void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 	}
 }
 
-void initPIDvalues(void)
-{
-	vPhi.Kp = 0;
-	vPhi.Ki = 0;
-	vPhi.Kd = 0;
-	vPhi.integratedSum = 0;
-	vPhi.previousError = 0;
-	vPhi.previousTime = 0;
-	vPhi.targetValue = 0;
-	vPhi.boundIterm = 0.35;
-	vPhi.KpAngular = 0;
-	
-	vTheta.Kp = 0;
-	vTheta.Ki = 0;
-	vTheta.Kd = 0;
-	vTheta.integratedSum = 0;
-	vTheta.previousError = 0;
-	vTheta.previousTime = 0;
-	vTheta.targetValue = 0;
-	vTheta.boundIterm = 0.35;
-	vTheta.KpAngular = 0;
-	
-	vGamma.Kp = 0;
-	vGamma.Ki = 0;
-	vGamma.Kd = 0;
-	vGamma.integratedSum = 0;
-	vGamma.previousError = 0;
-	vGamma.previousTime = 0;
-	vGamma.targetValue = 0;
-	vGamma.boundIterm = 0.35;
-	vGamma.KpAngular = 0;
-	
-	vMotor.m1Value = 0;
-	vMotor.m2Value = 0;
-	vMotor.m3Value = 0;
-	vMotor.m4Value = 0;
-	vMotor.mMinBound = 1.0;
-	vMotor.mMaxBound = 2.2;
-	vMotor.mMinPID = -0.5;
-	vMotor.mMaxPID = 0.5;
-}
-
 int main(int argc, char **argv)
 {
 	uint64_t timeToCompute = 0,timeToRosPublish = 0, timeToUpdateMotor = 0;
@@ -160,6 +181,7 @@ int main(int argc, char **argv)
 	uint64_t timeToDebugDisplay=0;
 	Sensors_init();
 	Actuators_init();
+	qConfig::readConfigFile("config.txt",timeConstants,7,idConstants,1,filterConstants,2,boolConstants,1);
 	initPIDvalues();
 	qControl quadController(&vPhi, &vTheta, &vGamma, &vMotor, &imud, &groundDistance, &throttle);
 	
@@ -180,13 +202,13 @@ int main(int argc, char **argv)
 	{
 		IMU_spin();
 		timeNow = RTMath::currentUSecsSinceEpoch();
-		if(timeNow-timeToUpdateTargetAngle>TIME_TO_UPDATE_TARGETANGLE)
+		if(timeNow-timeToUpdateTargetAngle>timeConstants[TIME_TO_UPDATE_TARGETANGLE].value)
 		{
 			timeToUpdateTargetAngle=timeNow;
-			vTheta.targetValue = (M*vTheta.targetValue)+(N*targetAngleUpdater);
+			vTheta.targetValue = (filterConstants[M].value*vTheta.targetValue)+(filterConstants[N].value*targetAngleUpdater);
 		}
 		
-		if(timeNow-timeToCompute>TIME_TO_COMPUTE)
+		if(timeNow-timeToCompute>timeConstants[TIME_TO_COMPUTE].value)
 		{
 			timeToCompute = timeNow;
 			imud = IMU_data();
@@ -195,7 +217,7 @@ int main(int argc, char **argv)
 			quadController.compute();
 		}
 		
-		if(timeNow-timeToUpdateMotor>TIME_TO_UPDATEMOTOR)
+		if(timeNow-timeToUpdateMotor>timeConstants[TIME_TO_UPDATEMOTOR].value)
 		{
 			timeToUpdateMotor = timeNow;
 			if(Armed == true)
@@ -214,24 +236,24 @@ int main(int argc, char **argv)
 				Arm = false;
 				Armed = true;
 			}
-			if(((timeNow-timeSinceArm)>TIME_TO_ARM)&(Armed==true))
+			if(((timeNow-timeSinceArm)>timeConstants[TIME_TO_ARM].value)&(Armed==true))
 			{
 				Armed = false;
 				break;
 			}
 		}
 		
-		if(timeNow-timeToRosSpin>TIME_TO_ROS_SPIN)
+		if(timeNow-timeToRosSpin>timeConstants[TIME_TO_ROS_SPIN].value)
 		{
 			timeToRosSpin = timeNow;
 			ros::spinOnce();
 		}
 
-		if(timeNow-timeToRosPublish>TIME_TO_ROS_PUBLISH)
+		if(timeNow-timeToRosPublish>timeConstants[TIME_TO_ROS_PUBLISH].value)
 		{
 			timeToRosPublish = timeNow;
 			quadMsgs::qStatus msg;
-			msg.qID = QuadID;
+			msg.qID = idConstants[QuadID].value;
 			msg.qM1 = vMotor.m1Value;
 			msg.qM2 = vMotor.m2Value;
 			msg.qM3 = vMotor.m3Value;
@@ -245,8 +267,8 @@ int main(int argc, char **argv)
 			quadStatus.publish(msg);
 		}
 		
-		if(debugDisplay == true)
-			if(timeNow-timeToDebugDisplay>TIME_TO_DEBUG_DISPLAY)
+		if(boolConstants[debugDisplay].value == true)
+			if(timeNow-timeToDebugDisplay>timeConstants[TIME_TO_DEBUG_DISPLAY].value)
 			{
 				timeToDebugDisplay = timeNow;
 				cout << vMotor.m1Value << "\t";
