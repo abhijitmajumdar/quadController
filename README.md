@@ -22,16 +22,23 @@ Place a config.txt file in the main directory (quadController folder) with the f
 # The RTIMULib.ini file
 The RTIMULib makes a configuration file. Make sure of the following things:
 
-IMUType=7
-BusIsI2C=false
-SPIBus=0
-SPISelect=1
-SPISpeed=8000000
-MPU9250GyroAccelSampleRate=400
-MPU9250GyroLpf=1
-MPU9250AccelLpf=3
-MPU9250GyroFSR=16
-MPU9250AccelFSR=16
+- IMUType=7
+- BusIsI2C=false
+- SPIBus=0
+- SPISelect=1
+- SPISpeed=8000000
+- MPU9250GyroAccelSampleRate=400
+- MPU9250GyroLpf=1
+- MPU9250AccelLpf=3
+- MPU9250GyroFSR=16
+- MPU9250AccelFSR=16
+
+# I2C changes on the RPi
+Make sure the I2C is at 400Khz which makes updates to the motors in ~1ms.
+Make the following changes to the file /boot/config.txt
+- dtparam=i2c1_arm=on
+- dtparam=i2c1_baudrate=400000
+
 
 # Changes
 - Made changes to time access to use RTMath time instead of OS time to bring computation down from 250% to 100%
@@ -40,3 +47,4 @@ MPU9250AccelFSR=16
 - Added runProgram as a condition when the Compute and MotorUpdate run to shutdown properly
 - Added a delay of 3 seconds for threads to close normally before detaching them and exiting program
 - The program exits when either the ARM timer runs out or the angle of the quad exceeds 80degrees
+- Changed the I2C clock to change the setMotor() time from 3.5ms to 1ms
