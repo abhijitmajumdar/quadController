@@ -1,6 +1,4 @@
 #include "ros/ros.h"
-#include "std_msgs/String.h"
-#include "std_msgs/Int32.h"
 #include "std_msgs/Bool.h"
 #include <sstream>
 #include <iostream>
@@ -14,7 +12,6 @@
 #include <thread>
 #include <sched.h>
 #include <unistd.h>
-#include <math.h>
 
 using namespace std;
 
@@ -25,25 +22,22 @@ using namespace std;
 #define TIME_TO_ROS_SPIN 4
 #define TIME_TO_ARM 5
 #define TIME_TO_DEBUG_DISPLAY 6
-#define QuadID 0
+#define QuadID 7
 #define debugDisplay 0
 #define ANGLE_UPDATE_STEP 0
 
-lConst timeConstants[7] = {
-	{"TIME_TO_UPDATE_TARGETANGLE",80000},
-	{"TIME_TO_COMPUTE",20000},
-	{"TIME_TO_UPDATEMOTOR",20000},
+lConst longConstants[8] = {
+	{"TIME_TO_UPDATE_TARGETANGLE",100000},
+	{"TIME_TO_COMPUTE",5000},
+	{"TIME_TO_UPDATEMOTOR",10000},
 	{"TIME_TO_ROS_PUBLISH",200000},
 	{"TIME_TO_ROS_SPIN",200000},
 	{"TIME_TO_ARM",3000000},
-	{"TIME_TO_DEBUG_DISPLAY",1000000}
-	};
-	
-lConst idConstants[1] = {
+	{"TIME_TO_DEBUG_DISPLAY",1000000},
 	{"QuadID",4745}
 	};
 	
-fConst angleConstants[1] = {
+fConst floatConstants[1] = {
 	{"ANGLE_UPDATE_STEP",0.314}
 	};
 	
@@ -58,7 +52,7 @@ static int groundDistance;
 static float throttle = 1.0;
 static bool Arm = false, Armed = false, runProgram = true;
 static float targetAngleUpdater = 0.0;
-static timespec timeStructure;
+static uint64_t Time;
 
 void initPIDvalues(void)
 {
@@ -102,11 +96,6 @@ void initPIDvalues(void)
 	vMotor.mMaxPID = 0.5;
 }
 
-void gotquadPosition(const std_msgs::String::ConstPtr& msg)
-{
-	;
-}
-
 void gotquadArm(const std_msgs::Bool::ConstPtr& msg)
 {
 	bool qArm = msg->data;
@@ -123,7 +112,7 @@ void gotquadArm(const std_msgs::Bool::ConstPtr& msg)
 
 void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 {
-	if(msg->qID == idConstants[QuadID].value)
+	if(msg->qID == longConstants[QuadID].value)
 	{
 		int32_t qSpeed = msg->qThrottle;
 		if((qSpeed>=0) & (qSpeed<=120))
@@ -191,63 +180,52 @@ int stick_this_thread_to_core(int core_id)
 
 void computeFunctions()
 {
-	clockid_t id=0;
-	long prevTime_sec = 0, prevTime_nsec = 0;
-	stick_this_thread_to_core(2);
+	uint64_t currentTime = 0;
+	uint64_t prevComputeTime = 0;
+	stick_this_thread_to_core(3);
 	qControl quadController(&vPhi, &vTheta, &vGamma, &vMotor, &imud, &groundDistance, &throttle);
 	
-	while(ros::ok())
+	while(ros::ok() & runProgram)
 	{
+		Time = RTMath::currentUSecsSinceEpoch();
+		currentTime = Time;
 		IMU_spin();
-		clock_gettime(id,&timeStructure);
-		long time_sec = timeStructure.tv_sec;
-		long time_nsec = timeStructure.tv_nsec;
-		long dt = (time_sec-prevTime_sec)*1000000 + (time_nsec-prevTime_nsec)/1000;
-		if(dt > timeConstants[TIME_TO_COMPUTE].value)
+		if((currentTime-prevComputeTime) > longConstants[TIME_TO_COMPUTE].value)
 		{
 			imud = IMU_data();
 			//groundDistance = SONAR_data();
 			quadController.compute();
-			prevTime_sec = time_sec;
-			prevTime_nsec = time_nsec;
 			if(boolConstants[debugDisplay].value)
 			{
-				if(dt>6000)
-					cout<<"C\n";
+				if(currentTime-prevComputeTime > 6000)
+					cout<<"C="<<currentTime-prevComputeTime<<"\n";
 			}
+			prevComputeTime = Time;
 		}
 	}
 }
 
 void motorUpdateFunctions()
 {
-	long prevTime_sec = 0, prevTime_nsec = 0;
-	long timeSinceArm_sec = 0, timeSinceArm_nsec = 0;
-	stick_this_thread_to_core(3);
-	while(ros::ok())
+	uint64_t currentTime = 0;
+	uint64_t prevMotorupdateTime = 0;
+	uint64_t timeSinceArm = 0;
+	stick_this_thread_to_core(2);
+	while(ros::ok() & runProgram)
 	{
-		long time_sec = timeStructure.tv_sec;
-		long time_nsec = timeStructure.tv_nsec;
-		long dt = (time_sec-prevTime_sec)*1000000 + (time_nsec-prevTime_nsec)/1000;
-		if(dt > timeConstants[TIME_TO_UPDATEMOTOR].value)
+		currentTime = Time;
+		if((currentTime-prevMotorupdateTime) > longConstants[TIME_TO_UPDATEMOTOR].value)
 		{
-			if(boolConstants[debugDisplay].value)
-			{
-				if(dt>12000)
-					cout<<"M\n";
-			}
 			if(Arm == true)
 			{
-				timeSinceArm_sec = time_sec;
-				timeSinceArm_nsec = time_nsec;
+				timeSinceArm = currentTime;
 				Arm = false;
 				Armed = true;
 			}
 			if(Armed == true)
 			{
 				setMotor(vMotor.m1Value, vMotor.m2Value, vMotor.m3Value, vMotor.m4Value);
-				dt = (time_sec-timeSinceArm_sec)*1000000 + (time_nsec-timeSinceArm_nsec)/1000;
-				if((dt > timeConstants[TIME_TO_ARM].value) | (imud.fusionPose.y() > 1.2) | (imud.fusionPose.y() < -1.2))
+				if(((currentTime-timeSinceArm) > longConstants[TIME_TO_ARM].value) | (imud.fusionPose.y() > 1.2) | (imud.fusionPose.y() < -1.2))
 				{
 					Armed = false;
 					setMotor(1.0, 1.0, 1.0, 1.0);
@@ -259,20 +237,25 @@ void motorUpdateFunctions()
 			{
 				setMotor(1.0, 1.0, 1.0, 1.0);
 			}
-			prevTime_sec = time_sec;
-			prevTime_nsec = time_nsec;
+			
+			if(boolConstants[debugDisplay].value)
+			{
+				if(currentTime-prevMotorupdateTime > 12000)
+					cout<<"M="<<currentTime-prevMotorupdateTime<<"\n";
+			}
+			prevMotorupdateTime = currentTime;
 		}
 	}
 }
 
 int main(int argc, char **argv)
 {
-	long prevTargetAngleTime_sec = 0, prevTargetAngleTime_nsec = 0;
-	long prevRosSpinTime_sec = 0, prevRosSpinTime_nsec = 0;
-	long prevRosPublishTime_sec = 0, prevRosPublishTime_nsec = 0;
-	long dt = 0;
+	uint64_t currentTime = 0;
+	uint64_t prevTargetAngleTime = 0;
+	uint64_t prevRosSpinTime = 0;
+	uint64_t prevRosPublishTime = 0;
 	
-	qConfig::readConfigFile("config.txt",timeConstants,7,idConstants,1,angleConstants,1,boolConstants,1);
+	qConfig::readConfigFile("config.txt",longConstants,8,floatConstants,1,boolConstants,1);
 	Sensors_init();
 	Actuators_init();
 	initPIDvalues();
@@ -282,49 +265,41 @@ int main(int argc, char **argv)
 	PWM_engage(HIGH);
 	ros::init(argc, argv, "quadController");
 	ros::NodeHandle n;
-	ros::Subscriber quadPosition = n.subscribe("quadPosition", 10, gotquadPosition);
 	ros::Subscriber quadArm = n.subscribe("quadArm", 10, gotquadArm);
 	ros::Subscriber quadParam = n.subscribe("quadParam", 10, gotquadParam);
 	ros::Publisher quadStatus = n.advertise<quadMsgs::qStatus>("quadStatus", 10);
 	std::thread computations(computeFunctions);
 	std::thread motorupdates(motorUpdateFunctions);
+	ros::Rate loop_rate(20);
 	LED_led(BLUE,HIGH);
 
 	while(ros::ok() & runProgram)
 	{
-		long time_sec = timeStructure.tv_sec;
-		long time_nsec = timeStructure.tv_nsec;
-		dt = (time_sec-prevTargetAngleTime_sec)*1000000 + (time_nsec-prevTargetAngleTime_nsec)/1000;
-		if(dt > timeConstants[TIME_TO_UPDATE_TARGETANGLE].value)
+		currentTime = Time;
+		if((currentTime-prevTargetAngleTime) > longConstants[TIME_TO_UPDATE_TARGETANGLE].value)
 		{
 			float angleDiff = targetAngleUpdater - vTheta.targetValue;
 			if(angleDiff != 0)
 			{
-				if(angleDiff > angleConstants[ANGLE_UPDATE_STEP].value)
-					vTheta.targetValue += angleConstants[ANGLE_UPDATE_STEP].value;
-				else if(angleDiff < -angleConstants[ANGLE_UPDATE_STEP].value)
-					vTheta.targetValue -= angleConstants[ANGLE_UPDATE_STEP].value;
+				if(angleDiff > floatConstants[ANGLE_UPDATE_STEP].value)
+					vTheta.targetValue += floatConstants[ANGLE_UPDATE_STEP].value;
+				else if(angleDiff < -floatConstants[ANGLE_UPDATE_STEP].value)
+					vTheta.targetValue -= floatConstants[ANGLE_UPDATE_STEP].value;
 				else
 					vTheta.targetValue = targetAngleUpdater;
 				cout<<targetAngleUpdater<<"->"<<vTheta.targetValue<<"\n";
 			}
-			prevTargetAngleTime_sec = time_sec;
-			prevTargetAngleTime_nsec = time_nsec;
+			prevTargetAngleTime = currentTime;
 		}
-		dt = (time_sec-prevRosSpinTime_sec)*1000000000 + (time_nsec-prevRosSpinTime_nsec);
-		dt = dt/1000;
-		if(dt > timeConstants[TIME_TO_ROS_SPIN].value)
+		if((currentTime-prevRosSpinTime) > longConstants[TIME_TO_ROS_SPIN].value)
 		{
 			ros::spinOnce();
-			prevRosSpinTime_sec = time_sec;
-			prevRosSpinTime_nsec = time_nsec;
+			prevRosSpinTime = currentTime;
 		}
-		dt = (time_sec-prevRosPublishTime_sec)*1000000000 + (time_nsec-prevRosPublishTime_nsec);
-		dt = dt/1000;
-		if(dt > timeConstants[TIME_TO_ROS_PUBLISH].value)
+		if((currentTime-prevRosPublishTime) > longConstants[TIME_TO_ROS_PUBLISH].value)
 		{
 			quadMsgs::qStatus msg;
-			msg.qID = idConstants[QuadID].value;
+			msg.qID = longConstants[QuadID].value;
 			msg.qM1 = vMotor.m1Value;
 			msg.qM2 = vMotor.m2Value;
 			msg.qM3 = vMotor.m3Value;
@@ -336,11 +311,15 @@ int main(int argc, char **argv)
 			msg.qYg = imud.gyro.y();
 			msg.qZg = imud.gyro.z();
 			quadStatus.publish(msg);
-			prevRosPublishTime_sec = time_sec;
-			prevRosPublishTime_nsec = time_nsec;
+			prevRosPublishTime = currentTime;
 		}
+		loop_rate.sleep();
 	}
 	LED_led(AMBER,LOW);
+	cout<<"Exiting\n";
+	runProgram = false;
+	for(int i=60;i--;i>0)
+		loop_rate.sleep();
 	motorupdates.detach();
 	computations.detach();
 	setMotor(1.0, 1.0, 1.0, 1.0);

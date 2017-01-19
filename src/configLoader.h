@@ -28,9 +28,9 @@ struct bConst
 
 class qConfig{
 	public:
-		static void readConfigFile(std::string configFileName,lConst* tC,int tCn,lConst* idC,int idCn,fConst* fC,int fCn,bConst* bC,int bCn);
+		static void readConfigFile(std::string configFileName,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn);
 	private:
-		static int store_line(std::string key,std::string val,lConst* tC,int tCn,lConst* idC,int idCn,fConst* fC,int fCn,bConst* bC,int bCn);
+		static int store_line(std::string key,std::string val,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn);
 };
 
 #endif //_CONFIGLOADER_H

@@ -8,16 +8,16 @@ sudo -E bash -c ./bin/quadNode
 # The config.txt file
 Place a config.txt file in the main directory (quadController folder) with the following contents as an example (Note: each variable is on a new line):
 
-TIME_TO_UPDATE_TARGETANGLE=80000
-TIME_TO_COMPUTE=5000
-TIME_TO_UPDATEMOTOR=10000
-TIME_TO_ROS_PUBLISH=200000
-TIME_TO_ROS_SPIN=200000
-TIME_TO_ARM=3000000
-TIME_TO_DEBUG_DISPLAY=1000000
-QuadID=4745
-debugDisplay=false
-ANGLE_UPDATE_STEP=0.314
+- TIME_TO_UPDATE_TARGETANGLE=100000
+- TIME_TO_COMPUTE=5000
+- TIME_TO_UPDATEMOTOR=10000
+- TIME_TO_ROS_PUBLISH=200000
+- TIME_TO_ROS_SPIN=200000
+- TIME_TO_ARM=3000000
+- TIME_TO_DEBUG_DISPLAY=1000000
+- QuadID=4745
+- debugDisplay=true
+- ANGLE_UPDATE_STEP=0.314
 
 # The RTIMULib.ini file
 The RTIMULib makes a configuration file. Make sure of the following things:
@@ -34,8 +34,9 @@ MPU9250GyroFSR=16
 MPU9250AccelFSR=16
 
 # Changes
-- Made seperate threads(with affinity) for compute functions and motor update functions
-- Changed angle update to step update and its corresponding variables in config.txt
-- computes now at 200Hz
-- Added debug on/off for displaying when compute/motorUpdate take longer time
-- Added safety feature where if quad goes beyond angle 70degree, it shuts down
+- Made changes to time access to use RTMath time instead of OS time to bring computation down from 250% to 100%
+- Made some changes to the configLoader to be more generic
+- ROS Publish at 5Hz gives less "C" and "M" time misses
+- Added runProgram as a condition when the Compute and MotorUpdate run to shutdown properly
+- Added a delay of 3 seconds for threads to close normally before detaching them and exiting program
+- The program exits when either the ARM timer runs out or the angle of the quad exceeds 80degrees

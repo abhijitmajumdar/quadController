@@ -1,22 +1,14 @@
 #include "configLoader.h"
 
 //Make sure to compile with "-std=c++11"
-int qConfig::store_line(std::string key,std::string val,lConst* tC,int tCn,lConst* idC,int idCn,fConst* fC,int fCn,bConst* bC,int bCn)
+int qConfig::store_line(std::string key,std::string val,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn)
 {
 	int i;
-	for(i=0;i<tCn;i++)
+	for(i=0;i<lCn;i++)
 	{
-		if(tC[i].name == key)
+		if(lC[i].name == key)
 		{
-			tC[i].value = stol(val);
-			return 0;
-		}
-	}
-	for(i=0;i<idCn;i++)
-	{
-		if(idC[i].name == key)
-		{
-			idC[i].value = stol(val);
+			lC[i].value = stol(val);
 			return 0;
 		}
 	}
@@ -42,7 +34,7 @@ int qConfig::store_line(std::string key,std::string val,lConst* tC,int tCn,lCons
 	return 1;
 }
 
-void qConfig::readConfigFile(std::string configFileName,lConst* tC,int tCn,lConst* idC,int idCn,fConst* fC,int fCn,bConst* bC,int bCn)
+void qConfig::readConfigFile(std::string configFileName,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn)
 {
 	fstream configFile;
 	configFile.open(configFileName,ios::out | ios::in);
@@ -58,7 +50,7 @@ void qConfig::readConfigFile(std::string configFileName,lConst* tC,int tCn,lCons
 			{
 				string value;
 				if(getline(is_line, value) ) 
-				  if(store_line(key,value, tC, tCn, idC, idCn, fC, fCn, bC, bCn)==1)
+				  if(store_line(key,value, lC, lCn, fC, fCn, bC, bCn)==1)
 					cout<<"Could not find "<<key<<"\n";
 			}
 		}
@@ -68,6 +60,6 @@ void qConfig::readConfigFile(std::string configFileName,lConst* tC,int tCn,lCons
 	}
 	else
 	{
-		cout<<"Error reading config file. Loading deafult values";
+		cout<<"Error reading config file. Loading deafult values\n";
 	}
 }
