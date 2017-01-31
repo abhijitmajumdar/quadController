@@ -23,10 +23,17 @@ using namespace std;
 #define TIME_TO_ARM 5
 #define TIME_TO_DEBUG_DISPLAY 6
 #define QuadID 7
-#define debugDisplay 0
+#define CH_THROTTLE_CALIBRATE 8
+#define CH_PITCH_CALIBRATE 9
+#define	CH_ROLL_CALIBRATE 10
+#define CH_YAW_CALIBRATE 11
+#define	CH_SWC_CALIBRATE 12
+#define	CH_SWB_CALIBRATE 13
+#define doTargetAngleUpdate 0
+#define debugDisplay 1
 #define ANGLE_UPDATE_STEP 0
 
-lConst longConstants[8] = {
+lConst longConstants[14] = {
 	{"TIME_TO_UPDATE_TARGETANGLE",100000},
 	{"TIME_TO_COMPUTE",5000},
 	{"TIME_TO_UPDATEMOTOR",10000},
@@ -34,18 +41,25 @@ lConst longConstants[8] = {
 	{"TIME_TO_ROS_SPIN",200000},
 	{"TIME_TO_ARM",3000000},
 	{"TIME_TO_DEBUG_DISPLAY",1000000},
-	{"QuadID",4745}
+	{"QuadID",4745},
+	{"CH_THROTTLE_CALIBRATE",1000},
+	{"CH_PITCH_CALIBRATE",1500},
+	{"CH_ROLL_CALIBRATE",1500},
+	{"CH_YAW_CALIBRATE",1500},
+	{"CH_SWC_CALIBRATE",1000},
+	{"CH_SWB_CALIBRATE",1000},
 	};
 	
 fConst floatConstants[1] = {
 	{"ANGLE_UPDATE_STEP",0.314}
 	};
 	
-bConst boolConstants[1] = {
+bConst boolConstants[2] = {
+	{"doTargetAngleUpdate",false},
 	{"debugDisplay",false}
 	};
 
-static qPIDvariables vPhi,vTheta,vGamma;
+static qPIDvariables vPhi,vTheta,vGamma; // vPhi->Roll, vTheta->Pitch, vGamma->Yaw
 static qMotorThrust vMotor;
 static RTIMU_DATA imud;
 static int groundDistance;
@@ -53,6 +67,7 @@ static float throttle = 1.0;
 static bool Arm = false, Armed = false, runProgram = true;
 static float targetAngleUpdater = 0.0;
 static uint64_t Time;
+static int rcValues[nChannels];
 
 void initPIDvalues(void)
 {
@@ -91,7 +106,7 @@ void initPIDvalues(void)
 	vMotor.m3Value = 0;
 	vMotor.m4Value = 0;
 	vMotor.mMinBound = 1.0;
-	vMotor.mMaxBound = 2.2;
+	vMotor.mMaxBound = 1.7;
 	vMotor.mMinPID = -0.5;
 	vMotor.mMaxPID = 0.5;
 }
@@ -124,32 +139,38 @@ void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 		if((qP>=0) & (qP<10000))
 		{
 			vTheta.Kp=((float)qP)/1000;
+			//vPhi.Kp=vTheta.Kp;
 		}
 		
 		int32_t qI = msg->qI;
 		if((qI>=0) & (qI<1000))
 		{
 			vTheta.Ki=((float)qI)/100000000;
+			//vPhi.Ki=vTheta.Ki;
 		}
 		if(qI==0)
 		{
 			vTheta.integratedSum = 0;
+			//vPhi.integratedSum=vTheta.integratedSum;
 		}
 		
 		int32_t qD = msg->qD;
 		if((qD>=0) & (qD<100))
 		{
 			vTheta.Kd=((float)qD)*1000;
+			//vPhi.Kd=vTheta.Kd;
 		}
 		if(qD==0)
 		{
 			vTheta.previousError = 0;
+			//vPhi.previousError=vTheta.previousError;
 		}
 		
 		int32_t qPA = msg->qPA;
 		if((qPA>=0) & (qPA<=100))
 		{
 			vTheta.KpAngular=((float)qPA)/100;
+			//vPhi.KpAngular=vTheta.KpAngular;
 		}
 		
 		int32_t qTA = msg->qTargetAngle;
@@ -182,6 +203,8 @@ void computeFunctions()
 {
 	uint64_t currentTime = 0;
 	uint64_t prevComputeTime = 0;
+	uint64_t prevMotorupdateTime = 0;
+	uint64_t timeSinceArm = 0;
 	stick_this_thread_to_core(3);
 	qControl quadController(&vPhi, &vTheta, &vGamma, &vMotor, &imud, &groundDistance, &throttle);
 	
@@ -194,26 +217,23 @@ void computeFunctions()
 		{
 			imud = IMU_data();
 			//groundDistance = SONAR_data();
+			getRCData(rcValues);
+			throttle = (float)rcValues[CH_THROTTLE]/1000;
+			vTheta.targetValue = (float)(rcValues[CH_PITCH]-longConstants[CH_PITCH_CALIBRATE].value)/1000;
+			vPhi.targetValue = (float)(rcValues[CH_ROLL]-longConstants[CH_ROLL_CALIBRATE].value)/1000;
+			vGamma.targetValue = imud.fusionPose.z() + ((float)(rcValues[CH_YAW]-longConstants[CH_YAW_CALIBRATE].value)/1000);
 			quadController.compute();
 			if(boolConstants[debugDisplay].value)
 			{
-				if(currentTime-prevComputeTime > 6000)
+				if(currentTime-prevComputeTime > 9000)
+				{
 					cout<<"C="<<currentTime-prevComputeTime<<"\n";
+					cout<<vMotor.m1Value<<"\t"<<vMotor.m2Value<<"\t"<<vMotor.m3Value<<"\t"<<vMotor.m4Value<<"\n";
+				}
 			}
-			prevComputeTime = Time;
+			prevComputeTime = currentTime;
 		}
-	}
-}
-
-void motorUpdateFunctions()
-{
-	uint64_t currentTime = 0;
-	uint64_t prevMotorupdateTime = 0;
-	uint64_t timeSinceArm = 0;
-	stick_this_thread_to_core(2);
-	while(ros::ok() & runProgram)
-	{
-		currentTime = Time;
+		
 		if((currentTime-prevMotorupdateTime) > longConstants[TIME_TO_UPDATEMOTOR].value)
 		{
 			if(Arm == true)
@@ -232,6 +252,7 @@ void motorUpdateFunctions()
 					runProgram = false;
 					cout<<"Unarmed\n";
 				}
+				
 			}
 			else
 			{
@@ -240,11 +261,15 @@ void motorUpdateFunctions()
 			
 			if(boolConstants[debugDisplay].value)
 			{
-				if(currentTime-prevMotorupdateTime > 12000)
+				if(currentTime-prevMotorupdateTime > 15000)
 					cout<<"M="<<currentTime-prevMotorupdateTime<<"\n";
+				long tempTime = RTMath::currentUSecsSinceEpoch()-currentTime;
+				if(tempTime > 2000)
+				cout<<"dMTime: "<<tempTime<<"\n";
 			}
 			prevMotorupdateTime = currentTime;
 		}
+		
 	}
 }
 
@@ -255,7 +280,7 @@ int main(int argc, char **argv)
 	uint64_t prevRosSpinTime = 0;
 	uint64_t prevRosPublishTime = 0;
 	
-	qConfig::readConfigFile("config.txt",longConstants,8,floatConstants,1,boolConstants,1);
+	qConfig::readConfigFile("config.txt",longConstants,14,floatConstants,1,boolConstants,2);
 	Sensors_init();
 	Actuators_init();
 	initPIDvalues();
@@ -269,7 +294,6 @@ int main(int argc, char **argv)
 	ros::Subscriber quadParam = n.subscribe("quadParam", 10, gotquadParam);
 	ros::Publisher quadStatus = n.advertise<quadMsgs::qStatus>("quadStatus", 10);
 	std::thread computations(computeFunctions);
-	std::thread motorupdates(motorUpdateFunctions);
 	ros::Rate loop_rate(20);
 	LED_led(BLUE,HIGH);
 
@@ -278,16 +302,19 @@ int main(int argc, char **argv)
 		currentTime = Time;
 		if((currentTime-prevTargetAngleTime) > longConstants[TIME_TO_UPDATE_TARGETANGLE].value)
 		{
-			float angleDiff = targetAngleUpdater - vTheta.targetValue;
-			if(angleDiff != 0)
+			if(boolConstants[doTargetAngleUpdate].value==true)
 			{
-				if(angleDiff > floatConstants[ANGLE_UPDATE_STEP].value)
-					vTheta.targetValue += floatConstants[ANGLE_UPDATE_STEP].value;
-				else if(angleDiff < -floatConstants[ANGLE_UPDATE_STEP].value)
-					vTheta.targetValue -= floatConstants[ANGLE_UPDATE_STEP].value;
-				else
-					vTheta.targetValue = targetAngleUpdater;
-				cout<<targetAngleUpdater<<"->"<<vTheta.targetValue<<"\n";
+				float angleDiff = targetAngleUpdater - vTheta.targetValue;
+				if(angleDiff != 0)
+				{
+					if(angleDiff > floatConstants[ANGLE_UPDATE_STEP].value)
+						vTheta.targetValue += floatConstants[ANGLE_UPDATE_STEP].value;
+					else if(angleDiff < -floatConstants[ANGLE_UPDATE_STEP].value)
+						vTheta.targetValue -= floatConstants[ANGLE_UPDATE_STEP].value;
+					else
+						vTheta.targetValue = targetAngleUpdater;
+					cout<<targetAngleUpdater<<"->"<<vTheta.targetValue<<"\n";
+				}
 			}
 			prevTargetAngleTime = currentTime;
 		}
@@ -318,10 +345,7 @@ int main(int argc, char **argv)
 	LED_led(AMBER,LOW);
 	cout<<"Exiting\n";
 	runProgram = false;
-	for(int i=60;i--;i>0)
-		loop_rate.sleep();
-	motorupdates.detach();
-	computations.detach();
+	computations.join();
 	setMotor(1.0, 1.0, 1.0, 1.0);
 	//PWM_engage(LOW);
 	LED_led(BLUE,LOW);

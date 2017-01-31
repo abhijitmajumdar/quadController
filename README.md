@@ -39,8 +39,24 @@ Make the following changes to the file /boot/config.txt
 - dtparam=i2c1_arm=on
 - dtparam=i2c1_baudrate=400000
 
+# Bootloader changes to modify the Kernel use on RPi
+The following will restrict the kernel to use only the first 3 cpu for general tasks, leaving the 4th one only for precise quad computations
+In the file /boot/cmdline.txt add the following:
+isolcpus=3
+Also change the affinity for the IRQ in the system. This can be done more thoroughly by modifying the /proc/irq/IRQ_NUMBER/smp_affinity file of each IRQ.
+modify the file /proc/irq/default_smp_affinity from "f" to "7" to use only the first 3 cpus
 
 # Changes
+- Added RC-input libraries, modified the throttle, pitch, roll and yaw to take inputs from RC
+- Changed the exit procedure to thread.join()
+- Combined the compute and motorUpdate threads to one
+	- which might be the reason to cause the sudden jerks in the motor (tests show it was due to test bed)
+	- this reduced the cpu usage drastically, since the motorupdate was taking up 100%
+	- overall usage by compute and motor is just ~30%
+- Changed the cpu affinity of this combined thread to cpu3 
+- made changes to the kernal to use only the 1st 3 cpu, leaving the 4th-cpu3 only for the above
+- added calibration constants for rc inputs
+
 - Made changes to time access to use RTMath time instead of OS time to bring computation down from 250% to 100%
 - Made some changes to the configLoader to be more generic
 - ROS Publish at 5Hz gives less "C" and "M" time misses
