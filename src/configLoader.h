@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <map>
 
 using namespace std;
 
@@ -28,9 +29,9 @@ struct bConst
 
 class qConfig{
 	public:
-		static void readConfigFile(std::string configFileName,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn);
+		static void readConfigFile(std::string configFileName, std::map<int,lConst> &lC, int nlC, std::map<int,fConst> &fC, int nfC, std::map<int,bConst> &bC, int nbC);
 	private:
-		static int store_line(std::string key,std::string val,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn);
+		static int store_line(std::string key, std::string val, std::map<int,lConst> &lC, int nlC, std::map<int,fConst> &fC, int nfC, std::map<int,bConst> &bC, int nbC);
 };
 
 #endif //_CONFIGLOADER_H

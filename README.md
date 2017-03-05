@@ -1,5 +1,5 @@
 # quadController
-ROS Controller Node for erle-quadcopter
+ROS Controller Node
 
 # How to run the node on raspberry pi
 On the raspberry pi use the following command to run the node:
@@ -11,13 +11,36 @@ Place a config.txt file in the main directory (quadController folder) with the f
 - TIME_TO_UPDATE_TARGETANGLE=100000
 - TIME_TO_COMPUTE=5000
 - TIME_TO_UPDATEMOTOR=10000
-- TIME_TO_ROS_PUBLISH=200000
+- TIME_TO_ROS_PUBLISH=100000
 - TIME_TO_ROS_SPIN=200000
 - TIME_TO_ARM=3000000
 - TIME_TO_DEBUG_DISPLAY=1000000
+- TIME_TO_GET_RCUSB=20000
 - QuadID=4745
-- debugDisplay=true
+- debugDisplay=false
 - ANGLE_UPDATE_STEP=0.314
+- doTargetAngleUpdate=false
+- CH_THROTTLE_CALIBRATE=1.0
+- CH_PITCH_CALIBRATE=1.5
+- CH_ROLL_CALIBRATE=1.5
+- CH_YAW_CALIBRATE=1.5
+- CH_SWC_CALIBRATE=1.0
+- CH_SWB_CALIBRATE=1.0
+- I_THROTTLE_TRIGGER=1.5
+- PD_THROTTLE_TRIGGER=1.3
+- YAW_PA=2.0
+- YAW_P=0.4
+- YAW_I=0
+- YAW_D=0
+- ROLL_PA=5.2
+- ROLL_P=0.05
+- ROLL_I=0.00000001
+- ROLL_D=0
+- PITCH_PA=5.2
+- PITCH_P=0.05
+- PITCH_I=0.00000001
+- PITCH_D=0
+
 
 # The RTIMULib.ini file
 The RTIMULib makes a configuration file. Make sure of the following things:
@@ -47,6 +70,27 @@ Also change the affinity for the IRQ in the system. This can be done more thorou
 modify the file /proc/irq/default_smp_affinity from "f" to "7" to use only the first 3 cpus
 
 # Changes
+- Added seperate file for rcReceiver functions, and files for associated USB serial read functions
+- Added more config parameters for all controller constants and throttle triggers (I and PD)
+- made some changes to the config loader
+- moved throttle trigger to controller.cpp and added pointers to thriggers in the contructor
+- added buffer values for PID in the structure to store values received from ROS or set values from config temporarily untill trigger is used
+- added qTarget msg type to seperate status, arm, parameter and target values
+- added static variables argv and argc to use while ros initialization in a different function
+- added a manual override feature (and variable)
+- changed name to moveThread2Core
+- added more status parameters
+- restructured the entire main program to do config in main followed by FlightController and FlightInterface threads
+- made some changes to the sensor initializations
+- added feature in RC_init() to configure it as blocking or non-blocking using a seperate thread
+
+- Made changes to the configLoader. To add a new variable now just modify the top of the main file.
+- Changed rc-data from int to float and hence also the config file
+- Corrected moving average filter for rc receiver
+- removed complementry filter, since it did not remove the problematic spikes and cause delayed response
+- reduced moving average filter set to 5
+- added I triggers for pitch,roll and yaw
+
 - Added RC-input libraries, modified the throttle, pitch, roll and yaw to take inputs from RC
 - Changed the exit procedure to thread.join()
 - Combined the compute and motorUpdate threads to one

@@ -19,7 +19,7 @@ void Actuators_init(void)
 {
 	int fd = pca9685Setup(PIN_BASE,0x40,HERTZ);
 	pca9685PWMReset(fd);
-	//wiringPiSetup(); //Already initiated in Sensor since sensorInit is called first
+	wiringPiSetup(); //Not initiated in Sensor even though sensorInit is called first
 	pinMode(PWM_EN, OUTPUT);
 	pinMode(AMBER, OUTPUT);
 	LED_led(AMBER, LOW);

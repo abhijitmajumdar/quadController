@@ -19,6 +19,9 @@ struct qPIDvariables {
 	float Kp;
 	float Ki;
 	float Kd;
+	float KpBuffer;
+	float KiBuffer;
+	float KdBuffer;
 	float integratedSum;
 	float previousError;
 	uint64_t previousTime;
@@ -45,10 +48,13 @@ class qControl{
 	RTIMU_DATA* currentVal;
 	int *altSonar;
 	float* thrtl;
+	float* iTT;
+	float* pdTT;
 	public:
-		qControl(qPIDvariables*, qPIDvariables*, qPIDvariables*, qMotorThrust*, RTIMU_DATA*, int*, float*);
+		qControl(qPIDvariables*, qPIDvariables*, qPIDvariables*, qMotorThrust*, RTIMU_DATA*, int*, float*, float*, float*);
 		void compute();
 	private:
+		void qPIDlimit();
 		void qPIDcompute(float currentAngleValue, float currentGyroValue, uint64_t currentTime, qPIDvariables* qPIDv);
 		float qConstrain(float value, float min, float max);
 		void qCalibrateMotor();

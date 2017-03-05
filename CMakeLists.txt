@@ -33,6 +33,6 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_COVERAGE_COMPILE_FLAGS}" )
 
 FIND_LIBRARY(WIRINGPI_LIBRARY wiringPi /usr/lib/libwiringPi.so)
-rosbuild_add_executable(quadNode src/main.cpp src/sensorFunctions.cpp src/actuatorFunctions.cpp src/controller.cpp src/configLoader.cpp)
+rosbuild_add_executable(quadNode src/main.cpp src/sensorFunctions.cpp src/actuatorFunctions.cpp src/controller.cpp src/configLoader.cpp src/rcFunctions.cpp src/USBSerial.cpp)
 target_link_libraries(quadNode /usr/lib/libwiringPi.so /usr/lib/libwiringPiDev.so /usr/lib/libwiringPiPca9685.so /usr/lib/libRTIMULib.so)
 #add_dependencies(quadNode wiringPi)

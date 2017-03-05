@@ -1,10 +1,10 @@
 #include "configLoader.h"
 
 //Make sure to compile with "-std=c++11"
-int qConfig::store_line(std::string key,std::string val,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn)
+int qConfig::store_line(std::string key, std::string val, std::map<int,lConst> &lC, int nlC, std::map<int,fConst> &fC, int nfC, std::map<int,bConst> &bC, int nbC)
 {
 	int i;
-	for(i=0;i<lCn;i++)
+	for(i=0;i<nlC;i++)
 	{
 		if(lC[i].name == key)
 		{
@@ -12,7 +12,7 @@ int qConfig::store_line(std::string key,std::string val,lConst* lC,int lCn,fCons
 			return 0;
 		}
 	}
-	for(i=0;i<fCn;i++)
+	for(i=0;i<nfC;i++)
 	{
 		if(fC[i].name == key)
 		{
@@ -20,7 +20,7 @@ int qConfig::store_line(std::string key,std::string val,lConst* lC,int lCn,fCons
 			return 0;
 		}
 	}
-	for(i=0;i<bCn;i++)
+	for(i=0;i<nbC;i++)
 	{
 		if(bC[i].name == key)
 		{
@@ -34,7 +34,7 @@ int qConfig::store_line(std::string key,std::string val,lConst* lC,int lCn,fCons
 	return 1;
 }
 
-void qConfig::readConfigFile(std::string configFileName,lConst* lC,int lCn,fConst* fC,int fCn,bConst* bC,int bCn)
+void qConfig::readConfigFile(std::string configFileName, std::map<int,lConst> &lC, int nlC, std::map<int,fConst> &fC, int nfC, std::map<int,bConst> &bC, int nbC)
 {
 	fstream configFile;
 	configFile.open(configFileName,ios::out | ios::in);
@@ -50,7 +50,7 @@ void qConfig::readConfigFile(std::string configFileName,lConst* lC,int lCn,fCons
 			{
 				string value;
 				if(getline(is_line, value) ) 
-				  if(store_line(key,value, lC, lCn, fC, fCn, bC, bCn)==1)
+				  if(store_line(key,value,lC,nlC,fC,nfC,bC,nbC)==1)
 					cout<<"Could not find "<<key<<"\n";
 			}
 		}

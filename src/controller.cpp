@@ -5,7 +5,7 @@
 #define M3_OFFSET 0	//(float)0.20
 #define M4_OFFSET 0	//(float)0.18
 
-qControl::qControl(qPIDvariables* vPhi, qPIDvariables* vTheta, qPIDvariables* vGamma, qMotorThrust* qMotor, RTIMU_DATA* currentValues, int *altitudeSonar, float* throttle)
+qControl::qControl(qPIDvariables* vPhi, qPIDvariables* vTheta, qPIDvariables* vGamma, qMotorThrust* qMotor, RTIMU_DATA* currentValues, int *altitudeSonar, float* throttle, float* iThrottleTrigger, float* pdThrottleTrigger)
 {
 	qPIDval[0] = vPhi;
 	qPIDval[1] = vTheta;
@@ -14,14 +14,57 @@ qControl::qControl(qPIDvariables* vPhi, qPIDvariables* vTheta, qPIDvariables* vG
 	currentVal = currentValues;
 	altSonar = altitudeSonar;
 	thrtl = throttle;
+	iTT = iThrottleTrigger;
+	pdTT = pdThrottleTrigger;
 }
 
 void qControl::compute()
 {
+	qPIDlimit();
 	qPIDcompute(currentVal->fusionPose.x(),currentVal->gyro.x(),currentVal->timestamp,qPIDval[0]);
 	qPIDcompute(currentVal->fusionPose.y(),currentVal->gyro.y(),currentVal->timestamp,qPIDval[1]);
-	qPIDcompute(currentVal->fusionPose.z(),currentVal->gyro.z(),currentVal->timestamp,qPIDval[2]);
+	qPIDcompute(0,currentVal->gyro.z(),currentVal->timestamp,qPIDval[2]);
 	qCalibrateMotor();
+}
+
+void qControl::qPIDlimit()
+{
+	if(*thrtl>*iTT)
+	{
+		qPIDval[0]->Ki=qPIDval[0]->KiBuffer;
+		qPIDval[1]->Ki=qPIDval[1]->KiBuffer;
+		qPIDval[2]->Ki=qPIDval[2]->KiBuffer;
+	}
+	else
+	{
+		qPIDval[0]->Ki=0;
+		qPIDval[1]->Ki=0;
+		qPIDval[2]->Ki=0;
+	}
+	if(*thrtl>*pdTT)
+	{
+		qPIDval[0]->Kp=qPIDval[0]->KpBuffer;
+		qPIDval[1]->Kp=qPIDval[1]->KpBuffer;
+		qPIDval[2]->Kp=qPIDval[2]->KpBuffer;
+		qPIDval[0]->Kd=qPIDval[0]->KdBuffer;
+		qPIDval[1]->Kd=qPIDval[1]->KdBuffer;
+		qPIDval[2]->Kd=qPIDval[2]->KdBuffer;
+	}
+	else
+	{
+		qPIDval[0]->Kp=0;
+		qPIDval[1]->Kp=0;
+		qPIDval[2]->Kp=0;
+		qPIDval[0]->Kd=0;
+		qPIDval[1]->Kd=0;
+		qPIDval[2]->Kd=0;
+	}
+	if(qPIDval[0]->Ki == 0) qPIDval[0]->integratedSum = 0;
+	if(qPIDval[1]->Ki == 0) qPIDval[1]->integratedSum = 0;
+	if(qPIDval[2]->Ki == 0) qPIDval[2]->integratedSum = 0;
+	if(qPIDval[0]->Kd == 0) qPIDval[0]->previousError = 0;
+	if(qPIDval[1]->Kd == 0) qPIDval[1]->previousError = 0;
+	if(qPIDval[2]->Kd == 0) qPIDval[2]->previousError = 0;
 }
 
 void qControl::qPIDcompute(float currentAngleValue, float currentGyroValue, uint64_t currentTime, qPIDvariables* qPIDv)
