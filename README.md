@@ -1,6 +1,11 @@
 # quadController
 ROS Controller Node
 
+# Compiling
+Compile using rosmake. It should be noted that the code uses RTIMULib and pca9685 libraries for interfacing the sensors and actuators, which must be installed before compiling this code
+- https://github.com/RTIMULib/RTIMULib
+- https://github.com/TeraHz/PCA9685
+
 # How to run the node on raspberry pi
 On the raspberry pi use the following command to run the node:
 sudo -E bash -c ./bin/quadNode
