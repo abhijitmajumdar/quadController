@@ -1,6 +1,9 @@
 # quadController
 ROS Controller Node
 
+![Alt text](/Photos/bigquad.jpg?raw=true "The larger quadcopter")
+![Alt text](/Photos/flight.jpg?raw=true "In flight")
+
 # Compiling
 Compile using rosmake. It should be noted that the code uses RTIMULib and pca9685 libraries for interfacing the sensors and actuators, which must be installed before compiling this code
 - https://github.com/RTIMULib/RTIMULib
@@ -73,6 +76,11 @@ In the file /boot/cmdline.txt add the following:
 isolcpus=3
 Also change the affinity for the IRQ in the system. This can be done more thoroughly by modifying the /proc/irq/IRQ_NUMBER/smp_affinity file of each IRQ.
 modify the file /proc/irq/default_smp_affinity from "f" to "7" to use only the first 3 cpus
+
+# Design
+The STL files for the 3D models of custom printed parts is available in the Design Files folder. Pictures of the models for reference can be found in the Photos directory.
+The 3D parts of the smaller quadcopter are used from a Thingiverse project "T4 Quadcopter Mini 315 (7-8 inch props)"
+- http://www.thingiverse.com/thing:408363
 
 # Changes
 - Added seperate file for rcReceiver functions, and files for associated USB serial read functions
