@@ -2,7 +2,7 @@
 ROS Controller Node
 
 ![Alt text](/Photos/bigquad.jpg?raw=true "The larger quadcopter")
-![Alt text](/Photos/flight.jpg?raw=true "In flight")
+![Alt text](/Photos/flight.png?raw=true "In flight")
 
 # Compiling
 Compile using rosmake. It should be noted that the code uses RTIMULib and pca9685 libraries for interfacing the sensors and actuators, which must be installed before compiling this code
