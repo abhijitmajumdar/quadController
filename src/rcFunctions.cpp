@@ -124,7 +124,7 @@ void getRCUSBData(float *vals)
 	for(int i=0;i<nChannels;i++)
 	{
 		if((rcVal[i]>999) & (rcVal[i]<2001)) vals[i] = float(rcVal[i])/1000;
-		else vals[i] = 1.0;
+		else vals[i] = float(rcValDefault[i])/1000;
 	}
 }
 

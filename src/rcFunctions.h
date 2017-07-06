@@ -24,6 +24,8 @@
 #define CH_GEAR 4 // CH5: Gear
 
 #define nChannels 5
+
+const int rcValDefault[nChannels] = {1468,1480,1000,1478,1000};
 #endif
 
 #define PPM_PIN 7

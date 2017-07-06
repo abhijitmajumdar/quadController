@@ -7,7 +7,7 @@ ROS Controller Node
 # Compiling
 Compile using rosmake. It should be noted that the code uses RTIMULib and pca9685 libraries for interfacing the sensors and actuators, which must be installed before compiling this code
 - https://github.com/RTIMULib/RTIMULib
-- https://github.com/TeraHz/PCA9685
+- https://github.com/Reinbert/pca9685
 
 # How to run the node on raspberry pi
 On the raspberry pi use the following command to run the node:
@@ -16,24 +16,24 @@ sudo -E bash -c ./bin/quadNode
 # The config.txt file
 Place a config.txt file in the main directory (quadController folder) with the following contents as an example (Note: each variable is on a new line):
 
-- TIME_TO_UPDATE_TARGETANGLE=100000
 - TIME_TO_COMPUTE=5000
 - TIME_TO_UPDATEMOTOR=10000
 - TIME_TO_ROS_PUBLISH=100000
-- TIME_TO_ROS_SPIN=200000
+- TIME_TO_ROS_SPIN=50000
 - TIME_TO_ARM=3000000
 - TIME_TO_DEBUG_DISPLAY=1000000
 - TIME_TO_GET_RCUSB=20000
 - QuadID=4745
-- debugDisplay=false
-- ANGLE_UPDATE_STEP=0.314
-- doTargetAngleUpdate=false
-- CH_THROTTLE_CALIBRATE=1.0
-- CH_PITCH_CALIBRATE=1.5
-- CH_ROLL_CALIBRATE=1.5
-- CH_YAW_CALIBRATE=1.5
-- CH_SWC_CALIBRATE=1.0
-- CH_SWB_CALIBRATE=1.0
+- debugDisplay=1
+- CH_THROTTLE_MIN_CALIBRATE=1.06
+- CH_THROTTLE_MAX_CALIBRATE=1.896
+- CH_PITCH_CALIBRATE=1.48
+- CH_ROLL_CALIBRATE=1.468
+- CH_YAW_CALIBRATE=1.478
+- CH_GEAR_CALIBRATE=1.5
+- CH_PITCH_VARIANCE=0.016
+- CH_ROLL_VARIANCE=0.016
+- CH_YAW_VARIANCE=0.016
 - I_THROTTLE_TRIGGER=1.5
 - PD_THROTTLE_TRIGGER=1.3
 - YAW_PA=2.0
@@ -41,13 +41,17 @@ Place a config.txt file in the main directory (quadController folder) with the f
 - YAW_I=0
 - YAW_D=0
 - ROLL_PA=5.2
-- ROLL_P=0.05
-- ROLL_I=0.00000001
+- ROLL_P=0.04
+- ROLL_I=0
 - ROLL_D=0
 - PITCH_PA=5.2
 - PITCH_P=0.05
-- PITCH_I=0.00000001
+- PITCH_I=0
 - PITCH_D=0
+- CH_PITCH_CALIBRATE_ROS=0
+- CH_ROLL_CALIBRATE_ROS=0.1
+- CH_YAW_CALIBRATE_ROS=0
+- MODE=0
 
 
 # The RTIMULib.ini file
@@ -83,6 +87,19 @@ The 3D parts of the smaller quadcopter are used from a Thingiverse project "T4 Q
 - http://www.thingiverse.com/thing:408363
 
 # Changes
+- Changed file names
+- Moved the configuration parameters to configuration.cpp (with extern in .h file) accessible from main
+- Changed mapping of configuration parameters for easier access
+- The node now looks for the package path to fetch the locations of config.txt and RTIMULb.ini
+- Changed runProgram to ProgramAlive and added a function to safe exit
+- New features can be added to the new_controller_features() function to be called when needed
+- Added a mode parameter which defines the use of the program using ROS only, RC only, or both
+- Added target update angles from ROS. This demands faster spin rate. Later also do throttle control over ROS
+- Modified the manual override code to accomodate different modes
+- Removed targetangleupdater
+- Added default values to RC
+- 
+
 - Added seperate file for rcReceiver functions, and files for associated USB serial read functions
 - Added more config parameters for all controller constants and throttle triggers (I and PD)
 - made some changes to the config loader

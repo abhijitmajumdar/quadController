@@ -1,171 +1,122 @@
+// ROS based includes
 #include "ros/ros.h"
+#include <ros/package.h>
 #include "std_msgs/Bool.h"
 #include <quadMsgs/qParameters.h>
 #include <quadMsgs/qStatus.h>
 #include <quadMsgs/qTargets.h>
+// System based includes
 #include <thread>
 #include <sstream>
 #include <iostream>
 #include <string.h>
 #include <sched.h>
 #include <unistd.h>
+#include <signal.h>
 #include <math.h>
-#include "actuatorFunctions.h"
-#include "sensorFunctions.h"
+// User based includes
+#include "actuators.h"
+#include "sensors.h"
 #include "controller.h"
-#include "configLoader.h"
+#include "configuration.h"
 #include "rcFunctions.h"
 
 using namespace std;
 
-enum{
-	TIME_TO_UPDATE_TARGETANGLE = 0,
-	TIME_TO_COMPUTE,
-	TIME_TO_UPDATEMOTOR,
-	TIME_TO_ROS_PUBLISH,
-	TIME_TO_ROS_SPIN,
-	TIME_TO_ARM,
-	TIME_TO_DEBUG_DISPLAY,
-	TIME_TO_GET_RCUSB,
-	QuadID,
-	NUM_LONG_CFG_VARIABLES
-};
-std::map<int,lConst> longConstants = {
-	{TIME_TO_UPDATE_TARGETANGLE,{"TIME_TO_UPDATE_TARGETANGLE",100000}},
-	{TIME_TO_COMPUTE,{"TIME_TO_COMPUTE",5000}},
-	{TIME_TO_UPDATEMOTOR,{"TIME_TO_UPDATEMOTOR",10000}},
-	{TIME_TO_ROS_PUBLISH,{"TIME_TO_ROS_PUBLISH",200000}},
-	{TIME_TO_ROS_SPIN,{"TIME_TO_ROS_SPIN",200000}},
-	{TIME_TO_ARM,{"TIME_TO_ARM",3000000}},
-	{TIME_TO_DEBUG_DISPLAY,{"TIME_TO_DEBUG_DISPLAY",1000000}},
-	{TIME_TO_GET_RCUSB,{"TIME_TO_GET_RCUSB",20000}},
-	{QuadID,{"QuadID",4745}}
-};
+/* Global variables */
 
-enum{
-	I_THROTTLE_TRIGGER = 0,
-	PD_THROTTLE_TRIGGER,
-	YAW_PA,
-	YAW_P,
-	YAW_I,
-	YAW_D,
-	ROLL_PA,
-	ROLL_P,
-	ROLL_I,
-	ROLL_D,
-	PITCH_PA,
-	PITCH_P,
-	PITCH_I,
-	PITCH_D,
-	ANGLE_UPDATE_STEP,
-	CH_THROTTLE_CALIBRATE,
-	CH_PITCH_CALIBRATE,
-	CH_ROLL_CALIBRATE,
-	CH_YAW_CALIBRATE,
-	CH_SWC_CALIBRATE,
-	CH_SWB_CALIBRATE,
-	NUM_FLOAT_CFG_VARIABLES
-};
-std::map<int,fConst> floatConstants = {
-	{I_THROTTLE_TRIGGER,{"I_THROTTLE_TRIGGER",1.5}},
-	{PD_THROTTLE_TRIGGER,{"PD_THROTTLE_TRIGGER",1.3}},
-	{YAW_PA,{"YAW_PA",2.0}},
-	{YAW_P,{"YAW_P",0}},
-	{YAW_I,{"YAW_I",0}},
-	{YAW_D,{"YAW_D",0}},
-	{ROLL_PA,{"ROLL_PA",5.0}},
-	{ROLL_P,{"ROLL_P",0}},
-	{ROLL_I,{"ROLL_I",0}},
-	{ROLL_D,{"ROLL_D",0}},
-	{PITCH_PA,{"PITCH_PA",5.0}},
-	{PITCH_P,{"PITCH_P",0}},
-	{PITCH_I,{"PITCH_I",0}},
-	{PITCH_D,{"PITCH_D",0}},
-	{ANGLE_UPDATE_STEP,{"ANGLE_UPDATE_STEP",0.314}},
-	{CH_THROTTLE_CALIBRATE,{"CH_THROTTLE_CALIBRATE",1.0}},
-	{CH_PITCH_CALIBRATE,{"CH_PITCH_CALIBRATE",1.5}},
-	{CH_ROLL_CALIBRATE,{"CH_ROLL_CALIBRATE",1.5}},
-	{CH_YAW_CALIBRATE,{"CH_YAW_CALIBRATE",1.5}},
-	{CH_SWC_CALIBRATE,{"CH_SWC_CALIBRATE",1.0}},
-	{CH_SWB_CALIBRATE,{"CH_SWB_CALIBRATE",1.0}}
-};
-
-enum{
-	doTargetAngleUpdate = 0,
-	debugDisplay,
-	NUM_BOOL_CFG_VARIABLES
-};
-std::map<int,bConst> boolConstants = {
-	{doTargetAngleUpdate,{"doTargetAngleUpdate",false}},
-	{debugDisplay,{"debugDisplay",false}}
-};
-
+// Used for ROS node
 static int _argc;
 static char **_argv;
+static std::string package_path;
+// Control variables
 static qPIDvariables vPhi,vTheta,vGamma; // vPhi->Roll, vTheta->Pitch, vGamma->Yaw
 static qMotorThrust vMotor;
+static float throttle = 1.0;
+// Program flow control variables
+static bool Arm = false, Armed = false, ManualOverride = false, ProgramAlive = true;
+static bool ROS_Update = false;
+static uint64_t Time;
+// Sensor data information
 static RTIMU_DATA imud;
 static int groundDistance;
-static float throttle = 1.0;
-static bool Arm = false, Armed = false, ManualOverride = false, runProgram = true;
-static float targetAngleUpdater = 0.0;
-static uint64_t Time;
 static float rcValues[nChannels];
+static float rosValues[nChannels];
 
+/* 
+ * Used to move thread to selected processor core
+ */
 int moveThread2Core(int core_id)
 {
    int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-   if (core_id < 0 || core_id >= num_cores)
-      return EINVAL;
-
+   if (core_id < 0 || core_id >= num_cores) return EINVAL;
    cpu_set_t cpuset;
    CPU_ZERO(&cpuset);
    CPU_SET(core_id, &cpuset);
-
    pthread_t current_thread = pthread_self();    
    return pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
 }
 
+/*
+ * Function handlers to execute safe exit of preogram
+ */
+void prepare_exit(int s)
+{
+	ProgramAlive = false;
+}
+
+void ctrl_c_exit()
+{
+	struct sigaction sigIntHandler;
+	sigIntHandler.sa_handler = prepare_exit;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
+	sigaction(SIGINT, &sigIntHandler, NULL);
+}
+
+/*
+ * Initialize controller values
+ */
 void initPIDvalues(void)
 {
 	vPhi.Kp = 0;
 	vPhi.Ki = 0;
 	vPhi.Kd = 0;
-	vPhi.KpBuffer = floatConstants[ROLL_P].value;
-	vPhi.KiBuffer = floatConstants[ROLL_I].value;
-	vPhi.KdBuffer = floatConstants[ROLL_D].value;
+	vPhi.KpBuffer = qConstants["ROLL_P"];
+	vPhi.KiBuffer = qConstants["ROLL_I"];
+	vPhi.KdBuffer = qConstants["ROLL_D"];
 	vPhi.integratedSum = 0;
 	vPhi.previousError = 0;
 	vPhi.previousTime = 0;
 	vPhi.targetValue = 0;
 	vPhi.boundIterm = 0.35;
-	vPhi.KpAngular = floatConstants[ROLL_PA].value;
+	vPhi.KpAngular = qConstants["ROLL_PA"];
 	
 	vTheta.Kp = 0;
 	vTheta.Ki = 0;
 	vTheta.Kd = 0;
-	vTheta.KpBuffer = floatConstants[PITCH_P].value;
-	vTheta.KiBuffer = floatConstants[PITCH_I].value;
-	vTheta.KdBuffer = floatConstants[PITCH_D].value;
+	vTheta.KpBuffer = qConstants["PITCH_P"];
+	vTheta.KiBuffer = qConstants["PITCH_I"];
+	vTheta.KdBuffer = qConstants["PITCH_D"];
 	vTheta.integratedSum = 0;
 	vTheta.previousError = 0;
 	vTheta.previousTime = 0;
 	vTheta.targetValue = 0;
 	vTheta.boundIterm = 0.35;
-	vTheta.KpAngular = floatConstants[PITCH_PA].value;
+	vTheta.KpAngular = qConstants["PITCH_PA"];
 	
 	vGamma.Kp = 0;
 	vGamma.Ki = 0;
 	vGamma.Kd = 0;
-	vGamma.KpBuffer = floatConstants[YAW_P].value;
-	vGamma.KiBuffer = floatConstants[YAW_I].value;
-	vGamma.KdBuffer = floatConstants[YAW_D].value;
+	vGamma.KpBuffer = qConstants["YAW_P"];
+	vGamma.KiBuffer = qConstants["YAW_I"];
+	vGamma.KdBuffer = qConstants["YAW_D"];
 	vGamma.integratedSum = 0;
 	vGamma.previousError = 0;
 	vGamma.previousTime = 0;
 	vGamma.targetValue = 0;
 	vGamma.boundIterm = 0.35;
-	vGamma.KpAngular = floatConstants[YAW_PA].value;
+	vGamma.KpAngular = qConstants["YAW_PA"];
 	
 	vMotor.m1Value = 0;
 	vMotor.m2Value = 0;
@@ -177,25 +128,47 @@ void initPIDvalues(void)
 	vMotor.mMaxPID = 0.5;
 }
 
+/*
+ * Test function for new features
+ */
+void new_controller_features(void)
+{
+	// Tilt-Throttle control
+	float cosx = cos(imud.fusionPose.x());
+	float cosy = cos(imud.fusionPose.y());
+	float cosz = sqrt(abs(1.0 - cosx*cosx - cosy*cosy));
+	if(throttle > qConstants["PD_THROTTLE_TRIGGER"]) // Can be done since throttle is updated before calling this fucntion
+	{
+		// May need to add a proportional constant here as (throttle*P/cosz)
+		if(cosz > 0.866) throttle = throttle/cosz; //Only do if tilt is less than 30deg
+		else throttle = throttle/0.866;
+	}
+}
+
+/*
+ * Flight Controller: controls flight
+ */
 void FlightController()
 {
+	// Move this thread to last core
+	moveThread2Core(3);
 	uint64_t currentTime = 0;
 	uint64_t prevComputeTime = 0;
 	uint64_t prevMotorupdateTime = 0;
 	uint64_t timeSinceArm = 0;
-	// Move this thread to last core
-	moveThread2Core(3);
 	// Initialize sensors and actuators
-	Sensors_init();
+	Sensors_init(&package_path);
 	Actuators_init();
 	// Initialize parameters and motor
 	initPIDvalues();
-	qControl quadController(&vPhi, &vTheta, &vGamma, &vMotor, &imud, &groundDistance, &throttle, &floatConstants[I_THROTTLE_TRIGGER].value, &floatConstants[PD_THROTTLE_TRIGGER].value);
+	qControl quadController(&vPhi, &vTheta, &vGamma, &vMotor, &imud, &groundDistance, &throttle, &qConstants["I_THROTTLE_TRIGGER"], &qConstants["PD_THROTTLE_TRIGGER"]);
 	setMotor(1.0, 1.0, 1.0, 1.0);
+	if(qConstants["MODE"]==RC_ONLY) ROS_Update = false;
+	else ROS_Update = true;
 	PWM_engage(HIGH);
 	LED_led(BLUE,HIGH);
 	
-	while(runProgram)
+	while(ProgramAlive)
 	{
 		Time = RTMath::currentUSecsSinceEpoch();
 		currentTime = Time;
@@ -204,21 +177,30 @@ void FlightController()
 		IMU_spin();
 		
 		// Time to do computations
-		if((currentTime-prevComputeTime) > longConstants[TIME_TO_COMPUTE].value)
+		if((currentTime-prevComputeTime) > qConstants["TIME_TO_COMPUTE"])
 		{
 			// Read IMU data
 			imud = IMU_data();
 			// Read Sonar data
 			//groundDistance = SONAR_data();
 			
+			// Manual Override is enabled when gear on RC is active(high)
+			// Modify the elseif{} later to adjust throttle over ROS also
 			if(ManualOverride == true) // If manual overide, get target values from RC
 			{
 				throttle = rcValues[CH_THROTTLE];
-				vTheta.targetValue = -(rcValues[CH_PITCH]-floatConstants[CH_PITCH_CALIBRATE].value);
-				vPhi.targetValue = (rcValues[CH_ROLL]-floatConstants[CH_ROLL_CALIBRATE].value);
-				vGamma.targetValue = (rcValues[CH_YAW]-floatConstants[CH_YAW_CALIBRATE].value);
+				vTheta.targetValue = -(rcValues[CH_PITCH]-qConstants["CH_PITCH_CALIBRATE"]);
+				vPhi.targetValue = (rcValues[CH_ROLL]-qConstants["CH_ROLL_CALIBRATE"]);
+				vGamma.targetValue = (rcValues[CH_YAW]-qConstants["CH_YAW_CALIBRATE"]);
 			}
-			else // Else get values from ROS
+			else if(ROS_Update == true)// Else get values from ROS
+			{
+				throttle = rcValues[CH_THROTTLE];
+				vTheta.targetValue = -(rosValues[CH_PITCH]+qConstants["CH_PITCH_CALIBRATE_ROS"]);
+				vPhi.targetValue = (rosValues[CH_ROLL]+qConstants["CH_ROLL_CALIBRATE_ROS"]);
+				vGamma.targetValue = (rosValues[CH_YAW]+qConstants["CH_YAW_CALIBRATE_ROS"]);
+			}
+			else
 			{
 				throttle = 1.0;
 				vTheta.targetValue = 0;
@@ -226,18 +208,21 @@ void FlightController()
 				vGamma.targetValue = 0;
 			}
 			
+			// New controller features later to be added into the controller compute functions
+			//new_controller_features();
+			
 			// Perform the calculations
 			quadController.compute();
 			
 			// Debug info
-			if(boolConstants[debugDisplay].value)
+			if(qConstants["debugDisplay"])
 			{
 				if(currentTime-prevComputeTime > 9000) cout<<"C="<<currentTime-prevComputeTime<<"\n";
 			}
 			prevComputeTime = currentTime;
 		}
 		// Time to update the motors/arming
-		if((currentTime-prevMotorupdateTime) > longConstants[TIME_TO_UPDATEMOTOR].value)
+		if((currentTime-prevMotorupdateTime) > qConstants["TIME_TO_UPDATEMOTOR"])
 		{
 			// If we get an Arm ROS message then ARM the quad and note the time. False the ARM variable to make sure the noted time is not overwritten
 			if(Arm == true)
@@ -247,12 +232,22 @@ void FlightController()
 				Armed = true;
 			}
 			
-			// RC Gear -> Manual Override
-			if(rcValues[CH_GEAR]>1.5)
+			// RC Gear -> Manual Override / Arming
+			if(qConstants["MODE"]==RC_ONLY)
 			{
-				if((ManualOverride==false)&(rcValues[CH_THROTTLE]<1.2)) ManualOverride = true;
+				ManualOverride = true;
+				if(rcValues[CH_GEAR]>1.5)
+				{
+					if(rcValues[CH_THROTTLE]<1.2) Armed = true;
+					timeSinceArm = currentTime;
+				}
+				else Armed = false;
 			}
-			else ManualOverride = false;
+			else
+			{
+				if(rcValues[CH_GEAR]>1.5) ManualOverride = true;
+				else ManualOverride = false;
+			}
 			
 			if(Armed == true) // If Armed, set the motor values as calculated
 			{
@@ -260,11 +255,11 @@ void FlightController()
 				LED_led(AMBER,HIGH);
 				
 				// Safety: If no arming msg is received for long OR if quad if at an angle over 70deg pitch/roll then shutdown
-				if(((currentTime-timeSinceArm) > longConstants[TIME_TO_ARM].value) | (fabsf(imud.fusionPose.y()) > 1.2) | (fabsf(imud.fusionPose.x()) > 1.2))
+				if(((currentTime-timeSinceArm) > qConstants["TIME_TO_ARM"]) | (fabsf(imud.fusionPose.y()) > 1.2) | (fabsf(imud.fusionPose.x()) > 1.2))
 				{
 					Armed = false;
 					setMotor(1.0, 1.0, 1.0, 1.0);
-					runProgram = false;
+					ProgramAlive = false;
 					cout<<"Unarmed\n";
 				}
 			}
@@ -275,7 +270,7 @@ void FlightController()
 			}
 			
 			//Debug info
-			if(boolConstants[debugDisplay].value)
+			if(qConstants["debugDisplay"])
 			{
 				if(currentTime-prevMotorupdateTime > 15000) cout<<"M="<<currentTime-prevMotorupdateTime<<"\n";
 			}
@@ -283,13 +278,16 @@ void FlightController()
 		}
 	}
 	// Make sure other threads are terminated
-	runProgram = false;
+	ProgramAlive = false;
 	// Set motor throttle to zero
 	setMotor(1.0, 1.0, 1.0, 1.0);
 	//PWM_engage(LOW);
 	LED_led(BLUE,LOW);
 }
 
+/*
+ * Service ROS Arming message
+ */
 void gotquadArm(const std_msgs::Bool::ConstPtr& msg)
 {
 	bool qArm = msg->data;
@@ -304,23 +302,31 @@ void gotquadArm(const std_msgs::Bool::ConstPtr& msg)
 	}
 }
 
+/*
+ * Service ROS Target update message
+ */
 void gotquadTarget(const quadMsgs::qTargets::ConstPtr& msg)
 {
-	if(msg->qID == longConstants[QuadID].value)
+	// Make sure to improve the update rate of the TIME_TO_ROS_SPIN in the config file
+	// Also need to make sure that if message is not received for a while the ROS_Update becomes false
+	if(msg->qID == qConstants["QuadID"])
 	{
-		float qPitch = msg->qPitch;
-		float qRoll = msg->qRoll;
-		float qYaw = msg->qYaw;
-		float qThrottle = msg->qThrottle;
+		rosValues[CH_PITCH] = msg->qPitch;
+		rosValues[CH_ROLL] = msg->qRoll;
+		rosValues[CH_YAW] = msg->qYaw;
+		//rosValues[CH_THROTTLE] = msg->qThrottle;
 	}
 	else{
 		cout<<"Message not for me: "<<msg->qID<<"\n";
 	}
 }
 
+/*
+ * Service ROS Parameters update message
+ */
 void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 {
-	if(msg->qID == longConstants[QuadID].value)
+	if(msg->qID == qConstants["QuadID"])
 	{
 		int32_t qP = msg->qP;
 		int32_t qI = msg->qI;
@@ -348,101 +354,109 @@ void gotquadParam(const quadMsgs::qParameters::ConstPtr& msg)
 	}
 }
 
+/*
+ * Flight Interface: manages interfaces
+ */
 void FlightInterface()
 {
+	moveThread2Core(3);
 	uint64_t currentTime = 0;
-	uint64_t prevTargetAngleTime = 0;
 	uint64_t prevRosSpinTime = 0;
 	uint64_t prevRosPublishTime = 0;
 	uint64_t prevGetRCUSBDataTime = 0;
-	moveThread2Core(3);
-	// Setup ROS
-	ros::init(_argc, _argv, "quadController");
-	ros::NodeHandle n;
-	// Setup ROS subscribers and publishers
-	ros::Subscriber quadArm = n.subscribe("quadArm", 10, gotquadArm);
-	ros::Subscriber quadParam = n.subscribe("quadParam", 10, gotquadParam);
-	ros::Subscriber quadTarget = n.subscribe("quadTarget", 10, gotquadTarget);
-	ros::Publisher quadStatus = n.advertise<quadMsgs::qStatus>("quadStatus", 10);
+	ros::Subscriber quadArm;
+	ros::Subscriber quadParam;
+	ros::Subscriber quadTarget;
+	ros::Publisher quadStatus;
+	if(qConstants["MODE"]!=RC_ONLY)
+	{
+		// Setup ROS
+		ros::init(_argc, _argv, "quadController");
+		ros::NodeHandle n;
+		// Setup ROS subscribers and publishers
+		quadArm = n.subscribe("quadArm", 10, gotquadArm);
+		quadParam = n.subscribe("quadParam", 10, gotquadParam);
+		quadTarget = n.subscribe("quadTarget", 10, gotquadTarget);
+		quadStatus = n.advertise<quadMsgs::qStatus>("quadStatus", 10);
+	}
+	// Setup RC
+	if(qConstants["MODE"]!=ROS_ONLY) RC_init(true);
 	// Set a loop rate so that CPU is not overloaded
+	if(qConstants["MODE"]==RC_ONLY) ros::Time::init();
 	ros::Rate loop_rate(100);
-	// Setup RC signals
-	RC_init(true);
 	
-	while(ros::ok() & runProgram)
+	while(ProgramAlive)
 	{
 		currentTime = Time;
-		// Time to get RC values from USB
-		if((currentTime-prevGetRCUSBDataTime) > longConstants[TIME_TO_GET_RCUSB].value)
+		if(qConstants["MODE"]!=ROS_ONLY)
 		{
-			getRCUSBData(rcValues);
-		}
-		// Time to update the target angels in steps
-		if((currentTime-prevTargetAngleTime) > longConstants[TIME_TO_UPDATE_TARGETANGLE].value)
-		{
-			if(boolConstants[doTargetAngleUpdate].value==true)
+			// Time to get RC values from USB
+			if((currentTime-prevGetRCUSBDataTime) > qConstants["TIME_TO_GET_RCUSB"])
 			{
-				float angleDiff = targetAngleUpdater - vTheta.targetValue;
-				if(angleDiff != 0)
-				{
-					if(angleDiff > floatConstants[ANGLE_UPDATE_STEP].value)
-						vTheta.targetValue += floatConstants[ANGLE_UPDATE_STEP].value;
-					else if(angleDiff < -floatConstants[ANGLE_UPDATE_STEP].value)
-						vTheta.targetValue -= floatConstants[ANGLE_UPDATE_STEP].value;
-					else
-						vTheta.targetValue = targetAngleUpdater;
-					cout<<targetAngleUpdater<<"->"<<vTheta.targetValue<<"\n";
-				}
+				getRCUSBData(rcValues);
+				prevGetRCUSBDataTime = currentTime;
 			}
-			prevTargetAngleTime = currentTime;
 		}
-		// Time to check if we received any ROS messages
-		if((currentTime-prevRosSpinTime) > longConstants[TIME_TO_ROS_SPIN].value)
+		if(qConstants["MODE"]!=RC_ONLY)
 		{
-			ros::spinOnce();
-			prevRosSpinTime = currentTime;
-		}
-		// Time to send ROS messages
-		if((currentTime-prevRosPublishTime) > longConstants[TIME_TO_ROS_PUBLISH].value)
-		{
-			quadMsgs::qStatus msg;
-			msg.qID = longConstants[QuadID].value;
-			msg.qM1 = vMotor.m1Value;
-			msg.qM2 = vMotor.m2Value;
-			msg.qM3 = vMotor.m3Value;
-			msg.qM4 = vMotor.m4Value;
-			msg.qXp = imud.fusionPose.x();
-			msg.qYp = imud.fusionPose.y();
-			msg.qZp = imud.fusionPose.z();
-			msg.qXa = imud.accel.x();
-			msg.qYa = imud.accel.y();
-			msg.qZa = imud.accel.z();
-			msg.qXg = imud.gyro.x();
-			msg.qYg = imud.gyro.y();
-			msg.qZg = imud.gyro.z();
-			msg.qXm = imud.compass.x();
-			msg.qYm = imud.compass.y();
-			msg.qZm = imud.compass.z();
-			quadStatus.publish(msg);
-			prevRosPublishTime = currentTime;
+			// Time to check if we received any ROS messages
+			if((currentTime-prevRosSpinTime) > qConstants["TIME_TO_ROS_SPIN"])
+			{
+				ros::spinOnce();
+				prevRosSpinTime = currentTime;
+			}
+			// Time to send ROS messages
+			if((currentTime-prevRosPublishTime) > qConstants["TIME_TO_ROS_PUBLISH"])
+			{
+				quadMsgs::qStatus msg;
+				msg.qID = qConstants["QuadID"];
+				msg.qM1 = vMotor.m1Value;
+				msg.qM2 = vMotor.m2Value;
+				msg.qM3 = vMotor.m3Value;
+				msg.qM4 = vMotor.m4Value;
+				msg.qXp = imud.fusionPose.x();
+				msg.qYp = imud.fusionPose.y();
+				msg.qZp = imud.fusionPose.z();
+				msg.qXa = imud.accel.x();
+				msg.qYa = imud.accel.y();
+				msg.qZa = imud.accel.z();
+				msg.qXg = imud.gyro.x();
+				msg.qYg = imud.gyro.y();
+				msg.qZg = imud.gyro.z();
+				msg.qXm = imud.compass.x();
+				msg.qYm = imud.compass.y();
+				msg.qZm = imud.compass.z();
+				quadStatus.publish(msg);
+				prevRosPublishTime = currentTime;
+			}
+			if(!ros::ok()) ProgramAlive=false;
 		}
 		loop_rate.sleep();
 	}
 	// Make sure other threads are terminated
-	runProgram = false;
+	ProgramAlive = false;
 	// Deinitialize the RC
-	RC_deinit();
+	if(qConstants["MODE"]!=ROS_ONLY) RC_deinit();
 }
 
+/*
+ * Main body of program
+ */
 int main(int argc, char **argv)
 {
 	cout<<"Quad Controller Node\n";
 	_argc = argc;
 	_argv = argv;
+	ctrl_c_exit();
+	// Get package path to load configurations
+	package_path = ros::package::getPath("quadController");
 	// Load configuration parameters
-	qConfig::readConfigFile("config.txt",longConstants,NUM_LONG_CFG_VARIABLES,floatConstants,NUM_FLOAT_CFG_VARIABLES,boolConstants,NUM_BOOL_CFG_VARIABLES);
+	qConfig::read_config_file(package_path+"/config.txt");
+	if(qConstants["debugDisplay"]) qConfig::print_loaded_constants();
+	// Create threads
 	std::thread flightControl(FlightController);
 	std::thread flightInterface(FlightInterface);
+	// Wait for threads to finish before exiting
 	flightInterface.join();
 	flightControl.join();
 	cout<<"Exiting\n";

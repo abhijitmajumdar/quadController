@@ -1,5 +1,5 @@
-#ifndef _ACTUATORFUNCTIONS_H
-#define _ACTUATORFUNCTIONS_H
+#ifndef _ACTUATORS_H
+#define _ACTUATORS_H
 
 #include <iostream>
 #include <signal.h>
@@ -14,4 +14,4 @@ void PWM_set(int ch, float* millis);
 void setMotor(float m1, float m2, float m3, float m4);
 void LED_led(int color, bool state);
 
-#endif //_ACTUATORFUNCTIONS_H
+#endif //_ACTUATORS_H

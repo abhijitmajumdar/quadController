@@ -1,4 +1,4 @@
-#include "actuatorFunctions.h"
+#include "actuators.h"
 #include "pca9685.h"
 
 #define PIN_BASE 300

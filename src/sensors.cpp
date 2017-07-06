@@ -1,13 +1,13 @@
-#include "sensorFunctions.h"
+#include "sensors.h"
 #include <thread>
 
 using namespace std;
 
 static RTIMU *imu;
 
-void IMU_init(void)
+void IMU_init(std::string *package_path)
 {
-	RTIMUSettings *settings = new RTIMUSettings("RTIMULib");
+	RTIMUSettings *settings = new RTIMUSettings(package_path->c_str(),"RTIMULib");
 	imu = RTIMU::createIMU(settings);
 	if(imu == NULL) cout<<"IMU not found\n";
 	imu->IMUInit();
@@ -61,8 +61,8 @@ int SONAR_data(void)
 	return ((data[0]-48)*100)+((data[1]-48)*10)+(data[2]-48);
 }
 
-void Sensors_init(void)
+void Sensors_init(std::string *package_path)
 {
-	IMU_init();
+	IMU_init(package_path);
 	//SONAR_init();
 }
