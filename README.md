@@ -86,6 +86,23 @@ The STL files for the 3D models of custom printed parts is available in the Desi
 The 3D parts of the smaller quadcopter are used from a Thingiverse project "T4 Quadcopter Mini 315 (7-8 inch props)"
 - http://www.thingiverse.com/thing:408363
 
+# Citing
+If you use this project in your research please cite it:
+```
+@INPROCEEDINGS{7994980, 
+author={Abhijit Majumdar and Nicholas Gamez and Patrick Benavidez and Mo Jamshidi},
+booktitle={2017 12th System of Systems Engineering Conference (SoSE)},
+title={Development of robot operating system (ROS) compatible open source quadcopter flight controller and interface},
+year={2017},
+volume={},
+number={},
+pages={1-6},
+keywords={aerospace control;autonomous aerial vehicles;helicopters;operating systems (computers);public domain software;robot programming;ROS;UAVs;flight test stability;landing sequences;open source quadcopter flight controller interface;prototype quadcopter;robot operating system;take-off sequences;unmanned aerial vehicles;Algorithm design and analysis;Brushless motors;Computer architecture;Instruction sets;Operating systems;Process control;Sensors;Flight controller;Quadcopter;Robot Operating System;Unmanned Aerial Vehicle;interface},
+doi={10.1109/SYSOSE.2017.7994980},
+ISSN={},
+month={June},}
+```
+
 # Changes
 - Changed file names
 - Moved the configuration parameters to configuration.cpp (with extern in .h file) accessible from main
@@ -98,7 +115,7 @@ The 3D parts of the smaller quadcopter are used from a Thingiverse project "T4 Q
 - Modified the manual override code to accomodate different modes
 - Removed targetangleupdater
 - Added default values to RC
-- 
+-
 
 - Added seperate file for rcReceiver functions, and files for associated USB serial read functions
 - Added more config parameters for all controller constants and throttle triggers (I and PD)
@@ -127,7 +144,7 @@ The 3D parts of the smaller quadcopter are used from a Thingiverse project "T4 Q
 	- which might be the reason to cause the sudden jerks in the motor (tests show it was due to test bed)
 	- this reduced the cpu usage drastically, since the motorupdate was taking up 100%
 	- overall usage by compute and motor is just ~30%
-- Changed the cpu affinity of this combined thread to cpu3 
+- Changed the cpu affinity of this combined thread to cpu3
 - made changes to the kernal to use only the 1st 3 cpu, leaving the 4th-cpu3 only for the above
 - added calibration constants for rc inputs
 
