@@ -15,65 +15,66 @@ sudo -E bash -c ./bin/quadNode
 
 # The config.txt file
 Place a config.txt file in the main directory (quadController folder) with the following contents as an example (Note: each variable is on a new line):
-
-- TIME_TO_COMPUTE=5000
-- TIME_TO_UPDATEMOTOR=10000
-- TIME_TO_ROS_PUBLISH=100000
-- TIME_TO_ROS_SPIN=50000
-- TIME_TO_ARM=3000000
-- TIME_TO_DEBUG_DISPLAY=1000000
-- TIME_TO_GET_RCUSB=20000
-- QuadID=4745
-- debugDisplay=1
-- CH_THROTTLE_MIN_CALIBRATE=1.06
-- CH_THROTTLE_MAX_CALIBRATE=1.896
-- CH_PITCH_CALIBRATE=1.48
-- CH_ROLL_CALIBRATE=1.468
-- CH_YAW_CALIBRATE=1.478
-- CH_GEAR_CALIBRATE=1.5
-- CH_PITCH_VARIANCE=0.016
-- CH_ROLL_VARIANCE=0.016
-- CH_YAW_VARIANCE=0.016
-- I_THROTTLE_TRIGGER=1.5
-- PD_THROTTLE_TRIGGER=1.3
-- YAW_PA=2.0
-- YAW_P=0.4
-- YAW_I=0
-- YAW_D=0
-- ROLL_PA=5.2
-- ROLL_P=0.04
-- ROLL_I=0
-- ROLL_D=0
-- PITCH_PA=5.2
-- PITCH_P=0.05
-- PITCH_I=0
-- PITCH_D=0
-- CH_PITCH_CALIBRATE_ROS=0
-- CH_ROLL_CALIBRATE_ROS=0.1
-- CH_YAW_CALIBRATE_ROS=0
-- MODE=0
-
+```
+TIME_TO_COMPUTE=5000
+TIME_TO_UPDATEMOTOR=10000
+TIME_TO_ROS_PUBLISH=100000
+TIME_TO_ROS_SPIN=50000
+TIME_TO_ARM=3000000
+TIME_TO_DEBUG_DISPLAY=1000000
+TIME_TO_GET_RCUSB=20000
+QuadID=4745
+debugDisplay=1
+CH_THROTTLE_MIN_CALIBRATE=1.06
+CH_THROTTLE_MAX_CALIBRATE=1.896
+CH_PITCH_CALIBRATE=1.48
+CH_ROLL_CALIBRATE=1.468
+CH_YAW_CALIBRATE=1.478
+CH_GEAR_CALIBRATE=1.5
+CH_PITCH_VARIANCE=0.016
+CH_ROLL_VARIANCE=0.016
+CH_YAW_VARIANCE=0.016
+I_THROTTLE_TRIGGER=1.5
+PD_THROTTLE_TRIGGER=1.3
+YAW_PA=2.0
+YAW_P=0.4
+YAW_I=0
+YAW_D=0
+ROLL_PA=5.2
+ROLL_P=0.04
+ROLL_I=0
+ROLL_D=0
+PITCH_PA=5.2
+PITCH_P=0.05
+PITCH_I=0
+PITCH_D=0
+CH_PITCH_CALIBRATE_ROS=0
+CH_ROLL_CALIBRATE_ROS=0.1
+CH_YAW_CALIBRATE_ROS=0
+MODE=0
+```
 
 # The RTIMULib.ini file
 The RTIMULib makes a configuration file. Make sure of the following things:
-
-- IMUType=7
-- BusIsI2C=false
-- SPIBus=0
-- SPISelect=1
-- SPISpeed=8000000
-- MPU9250GyroAccelSampleRate=400
-- MPU9250GyroLpf=1
-- MPU9250AccelLpf=3
-- MPU9250GyroFSR=16
-- MPU9250AccelFSR=16
-
+```
+IMUType=7
+BusIsI2C=false
+SPIBus=0
+SPISelect=1
+SPISpeed=8000000
+MPU9250GyroAccelSampleRate=400
+MPU9250GyroLpf=1
+MPU9250AccelLpf=3
+MPU9250GyroFSR=16
+MPU9250AccelFSR=16
+```
 # I2C changes on the RPi
 Make sure the I2C is at 400Khz which makes updates to the motors in ~1ms.
 Make the following changes to the file /boot/config.txt
-- dtparam=i2c1_arm=on
-- dtparam=i2c1_baudrate=400000
-
+```
+dtparam=i2c1_arm=on
+dtparam=i2c1_baudrate=400000
+```
 # Bootloader changes to modify the Kernel use on RPi
 The following will restrict the kernel to use only the first 3 cpu for general tasks, leaving the 4th one only for precise quad computations
 In the file /boot/cmdline.txt add the following:
@@ -89,7 +90,7 @@ The 3D parts of the smaller quadcopter are used from a Thingiverse project "T4 Q
 # Citing
 If you use this project in your research please cite it:
 ```
-@INPROCEEDINGS{7994980, 
+@INPROCEEDINGS{7994980,
 author={Abhijit Majumdar and Nicholas Gamez and Patrick Benavidez and Mo Jamshidi},
 booktitle={2017 12th System of Systems Engineering Conference (SoSE)},
 title={Development of robot operating system (ROS) compatible open source quadcopter flight controller and interface},
